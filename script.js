@@ -461,7 +461,7 @@ createTaskForm.addEventListener("submit", async event => {
 
         showExplore();
 
-    }  catch (error) {
+        }  catch (error) {
     console.error("Publishing task failed:", error);
 
     createMessage.textContent =
@@ -469,7 +469,7 @@ createTaskForm.addEventListener("submit", async event => {
         (error.code || error.name || "unknown") +
         " — " +
         (error.message || "Unknown error");
-}
+
     } finally {
         createTaskForm.dataset.submitting = "false";
         submitButton.disabled = false;
