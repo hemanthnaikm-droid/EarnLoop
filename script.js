@@ -461,13 +461,15 @@ createTaskForm.addEventListener("submit", async event => {
 
         showExplore();
 
-    } catch (error) {
-        console.error("Publishing task failed:", error);
+    }  catch (error) {
+    console.error("Publishing task failed:", error);
 
-        createMessage.textContent =
-            error.code === "permission-denied"
-                ? "Permission denied. Check your Firestore rules."
-                : "Unable to publish the task. Please try again.";
+    createMessage.textContent =
+        "Error: " +
+        (error.code || error.name || "unknown") +
+        " — " +
+        (error.message || "Unknown error");
+}
     } finally {
         createTaskForm.dataset.submitting = "false";
         submitButton.disabled = false;
