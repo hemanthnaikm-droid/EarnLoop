@@ -222,119 +222,277 @@ document.querySelectorAll(".nav-item").forEach(button => {
     });
 });
 
-/* CREATE AND PUBLISH DEMO TASKS */
+/* ===================================
+   FIREBASE TASK MARKETPLACE
+=================================== */
 
-createTaskForm.addEventListener("submit", event => {
-    event.preventDefault();
+let firebaseTasks = [];
+let stopTaskListener = null;
 
-    const title = document.getElementById("taskTitle")
-        .value.trim();
+const taskIcons = {
+    digital: "🌐",
+    skills: "✍️",
+    local: "📍"
+};
 
-    const description = document.getElementById("taskDescription")
-        .value.trim();
-
-    const category = document.getElementById("taskCategory").value;
-
-    const reward = Number(
-        document.getElementById("taskReward").value
+function renderFirebaseTasks() {
+    const oldCards = document.querySelectorAll(
+        ".firebase-task-card"
     );
 
-    if (!title || !description) {
+    oldCards.forEach(card => card.remove());
+
+    firebaseTasks.forEach(task => {
+        const card = document.createElement("article");
+
+        card.className = "task-card firebase-task-card";
+        card.dataset.category = task.category;
+
+        const top = document.createElement("div");
+        top.className = "task-top";
+
+        const icon = document.createElement("span");
+        icon.className = "task-icon";
+        icon.textContent = taskIcons[task.category] || "📋";
+
+        const type = document.createElement("span");
+        type.className = "task-type";
+        type.textContent = task.category.toUpperCase();
+
+        top.append(icon, type);
+
+        const title = document.createElement("h3");
+        title.textContent = task.title;
+
+        const description = document.createElement("p");
+        description.textContent = task.description;
+
+        const owner = document.createElement("p");
+        owner.className = "demo-notice";
+        owner.textContent = "Posted by " + task.ownerEmail;
+
+        const footer = document.createElement("div");
+        footer.className = "task-footer";
+
+        const rewardBox = document.createElement("div");
+
+        const label = document.createElement("span");
+        label.className = "reward-label";
+        label.textContent = "Proposed reward";
+
+        const reward = document.createElement("strong");
+        reward.className = "reward";
+        reward.textContent = "₹" + task.proposedReward;
+
+        rewardBox.append(label, reward);
+
+        const button = document.createElement("button");
+        button.className = "task-button";
+        button.textContent = "View task";
+
+        button.addEventListener("click", () => {
+            openFirebaseTask(task);
+        });
+
+        footer.append(rewardBox, button);
+
+        card.append(top, title, description, owner, footer);
+
+        taskList.appendChild(card);
+    });
+
+    applyTaskFilter();
+}
+
+function applyTaskFilter() {
+    const activeCategory =
+        document.querySelector(".category.active")
+            ?.dataset.category || "all";
+
+    document.querySelectorAll(".task-card").forEach(card => {
+        card.hidden =
+            activeCategory !== "all" &&
+            card.dataset.category !== activeCategory;
+    });
+}
+
+function openFirebaseTask(task) {
+    currentTask = null;
+
+    modalTitle.textContent = task.title;
+    modalDescription.textContent =
+        task.description +
+        "\n\nPosted by: " + task.ownerEmail;
+
+    modalReward.textContent =
+        "Proposed reward: ₹" + task.proposedReward;
+
+    modalMessage.textContent =
+        "This is an unfunded task proposal. " +
+        "No cash payment is currently guaranteed.";
+
+    const completeButton =
+        document.getElementById("demoComplete");
+
+    completeButton.disabled = true;
+    completeButton.textContent = "Not available yet";
+
+    taskModal.hidden = false;
+}
+
+function startTaskListener() {
+    if (stopTaskListener) {
+        stopTaskListener();
+        stopTaskListener = null;
+    }
+
+    const tasksQuery = query(
+        collection(db, "tasks"),
+        orderBy("createdAt", "desc")
+    );
+
+    stopTaskListener = onSnapshot(
+        tasksQuery,
+        snapshot => {
+            firebaseTasks = snapshot.docs.map(document => ({
+                id: document.id,
+                ...document.data()
+            }));
+
+            renderFirebaseTasks();
+        },
+        error => {
+            console.error("Task loading error:", error);
+
+            createMessage.textContent =
+                "Unable to load tasks. Please check your " +
+                "login status and Firestore rules.";
+        }
+    );
+}
+
+createTaskForm.addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (!authenticatedUser) {
         createMessage.textContent =
-            "Enter both a task title and description.";
+            "Please log in before publishing a task.";
         return;
     }
 
-    if (!Number.isSafeInteger(reward) || reward < 1 || reward > 10000) {
+    if (createTaskForm.dataset.submitting === "true") {
+        return;
+    }
+
+    const title = document
+        .getElementById("taskTitle")
+        .value.trim();
+
+    const description = document
+        .getElementById("taskDescription")
+        .value.trim();
+
+    const category = document
+        .getElementById("taskCategory")
+        .value;
+
+    const proposedReward = Number(
+        document.getElementById("taskReward").value
+    );
+
+    if (title.length < 3 || title.length > 70) {
+        createMessage.textContent =
+            "The title must contain 3–70 characters.";
+        return;
+    }
+
+    if (description.length < 10 || description.length > 1000) {
+        createMessage.textContent =
+            "The description must contain 10–1000 characters.";
+        return;
+    }
+
+    if (!["digital", "skills", "local"].includes(category)) {
+        createMessage.textContent = "Choose a valid category.";
+        return;
+    }
+
+    if (
+        !Number.isSafeInteger(proposedReward) ||
+        proposedReward < 1 ||
+        proposedReward > 10000
+    ) {
         createMessage.textContent =
             "Enter a whole-number reward between ₹1 and ₹10,000.";
         return;
     }
 
-    const taskId =
-        "demo-" + Date.now() + "-" +
-        Math.random().toString(36).slice(2, 8);
+    createTaskForm.dataset.submitting = "true";
 
-    const card = document.createElement("article");
-    card.className = "task-card";
-    card.dataset.category = category;
+    const submitButton = createTaskForm.querySelector(
+        'button[type="submit"]'
+    );
 
-    const top = document.createElement("div");
-    top.className = "task-top";
+    submitButton.disabled = true;
+    createMessage.textContent = "Publishing task...";
 
-    const icon = document.createElement("span");
-    icon.className = "task-icon";
-    icon.textContent =
-        category === "digital" ? "🌐" :
-        category === "skills" ? "✍️" : "📍";
+    try {
+        await authReady;
 
-    const type = document.createElement("span");
-    type.className = "task-type";
-    type.textContent = category.toUpperCase();
+        const user = auth.currentUser;
 
-    top.append(icon, type);
+        if (!user) {
+            throw new Error("Please log in again.");
+        }
 
-    const heading = document.createElement("h3");
-    heading.textContent = title;
+        await addDoc(collection(db, "tasks"), {
+            title,
+            description,
+            category,
+            proposedReward,
+            ownerId: user.uid,
+            ownerEmail: user.email,
+            createdAt: serverTimestamp(),
+            status: "open",
+            funded: false
+        });
 
-    const paragraph = document.createElement("p");
-    paragraph.textContent = description;
+        createTaskForm.reset();
 
-    const footer = document.createElement("div");
-    footer.className = "task-footer";
+        createMessage.textContent =
+            "Task proposal published successfully! " +
+            "It is not funded and does not guarantee payment.";
 
-    const rewardContainer = document.createElement("div");
+        showExplore();
 
-    const label = document.createElement("span");
-    label.className = "reward-label";
-    label.textContent = "Proposed reward";
+    } catch (error) {
+        console.error("Publishing task failed:", error);
 
-    const amount = document.createElement("strong");
-    amount.className = "reward";
-    amount.textContent = "₹" + reward;
-
-    rewardContainer.append(label, amount);
-
-    const viewButton = document.createElement("button");
-    viewButton.className = "task-button";
-    viewButton.textContent = "View task";
-
-    viewButton.dataset.taskId = taskId;
-    viewButton.dataset.task = title;
-    viewButton.dataset.description = description;
-    viewButton.dataset.reward = String(reward);
-
-    viewButton.addEventListener("click", () => {
-        openTask(viewButton);
-    });
-
-    footer.append(rewardContainer, viewButton);
-
-    card.append(top, heading, paragraph, footer);
-
-    taskList.prepend(card);
-
-    createTaskForm.reset();
-
-    createMessage.textContent =
-        "Demo task published! It is visible in Explore. " +
-        "No customer funding or real payment is attached.";
-
-    document.querySelectorAll(".category").forEach(button => {
-        button.classList.toggle(
-            "active",
-            button.dataset.category === "all"
-        );
-    });
-
-    getTaskCards().forEach(item => {
-        item.hidden = false;
-    });
-
-    showExplore();
+        createMessage.textContent =
+            error.code === "permission-denied"
+                ? "Permission denied. Check your Firestore rules."
+                : "Unable to publish the task. Please try again.";
+    } finally {
+        createTaskForm.dataset.submitting = "false";
+        submitButton.disabled = false;
+    }
 });
 
-pendingElement.textContent = formatRupees(0);
+/* START AND STOP REAL-TIME LISTENING */
+
+onAuthStateChanged(auth, user => {
+    if (user) {
+        startTaskListener();
+    } else {
+        if (stopTaskListener) {
+            stopTaskListener();
+            stopTaskListener = null;
+        }
+
+        firebaseTasks = [];
+        renderFirebaseTasks();
+    }
+});
 
 
 /* ===================================
