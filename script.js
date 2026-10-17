@@ -504,13 +504,16 @@ import {
     onAuthStateChanged
 } from
     "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-
 import {
+    collection,
     doc,
     setDoc,
-    serverTimestamp
-} from
-    "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+    addDoc,
+    serverTimestamp,
+    onSnapshot,
+    query,
+    orderBy
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 import { auth, db, authReady } from "./firebase.js";
 
