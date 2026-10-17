@@ -513,23 +513,7 @@ if (user) {
    EARNLOOP AUTHENTICATION
 =================================== */
 
-import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged
-} from
-    "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-import {
-    collection,
-    doc,
-    setDoc,
-    addDoc,
-    serverTimestamp,
-    onSnapshot,
-    query,
-    orderBy
-} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
 
 import { auth, db, authReady } from "./firebase.js";
 
