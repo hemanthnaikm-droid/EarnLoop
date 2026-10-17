@@ -475,3 +475,92 @@ h1 {
     font-size: 13px;
     line-height: 1.6;
 }
+
+/* AUTHENTICATION */
+
+.auth-section {
+    max-width: 480px;
+    margin: 35px auto;
+}
+
+.auth-card {
+    padding: 25px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+}
+
+.auth-logo {
+    display: grid;
+    place-items: center;
+    width: 50px;
+    height: 50px;
+    margin-bottom: 25px;
+    border-radius: 15px;
+    background: var(--accent);
+    color: var(--background);
+    font-size: 30px;
+    font-weight: 900;
+}
+
+.auth-card h2 {
+    margin: 12px 0;
+    font-size: 27px;
+}
+
+.auth-card .description {
+    margin-bottom: 25px;
+}
+
+#authForm {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+#authForm label {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+#authForm input {
+    width: 100%;
+    padding: 14px;
+    background: var(--background);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    font-size: 14px;
+}
+
+#authForm input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+#authForm .primary-button {
+    margin-top: 10px;
+    min-height: 46px;
+}
+
+.text-button {
+    display: block;
+    margin-top: 20px;
+    padding: 8px 0;
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    font-size: 13px;
+}
+
+.auth-message {
+    margin-top: 15px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+[hidden] {
+    display: none !important;
+}
