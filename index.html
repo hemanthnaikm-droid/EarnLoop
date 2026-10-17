@@ -223,6 +223,67 @@
 
         </section>
 
+        <!-- CREATE TASK SECTION -->
+<section id="createSection" class="section" hidden>
+    <p class="eyebrow">CREATE AN OPPORTUNITY</p>
+    <h2>Post a task</h2>
+
+    <p class="description">
+        Describe useful work that someone can complete for a reward.
+    </p>
+
+    <form id="createTaskForm" class="create-form">
+
+        <label for="taskTitle">Task title</label>
+        <input
+            id="taskTitle"
+            type="text"
+            maxlength="70"
+            placeholder="e.g. Write a Kannada caption"
+            required
+        >
+
+        <label for="taskDescription">Task description</label>
+        <textarea
+            id="taskDescription"
+            rows="4"
+            maxlength="1000"
+            placeholder="Explain what the worker needs to do..."
+            required
+        ></textarea>
+
+        <label for="taskCategory">Category</label>
+        <select id="taskCategory" required>
+            <option value="digital">Digital</option>
+            <option value="skills">Skills</option>
+            <option value="local">Local</option>
+        </select>
+
+        <label for="taskReward">Proposed reward (₹)</label>
+        <input
+            id="taskReward"
+            type="number"
+            min="1"
+            max="10000"
+            step="1"
+            placeholder="20"
+            required
+        >
+
+        <button type="submit" class="primary-button">
+            Publish demo task
+        </button>
+
+        <p class="demo-notice">
+            Demo mode: publishing a task does not fund its reward
+            or guarantee payment to a worker.
+        </p>
+
+        <p id="createMessage" aria-live="polite"></p>
+
+    </form>
+</section>
+
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
