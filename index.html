@@ -27,6 +27,64 @@
 
     <main>
 
+        <!-- AUTHENTICATION SECTION -->
+<section id="authSection" class="auth-section" hidden>
+
+    <div class="auth-card">
+
+        <div class="auth-logo">E</div>
+
+        <p class="eyebrow">WELCOME TO EARNLOOP</p>
+
+        <h2 id="authHeading">Create your account</h2>
+
+        <p id="authDescription" class="description">
+            Join EarnLoop to explore opportunities.
+        </p>
+
+        <form id="authForm">
+
+            <label for="authEmail">Email address</label>
+
+            <input
+                id="authEmail"
+                type="email"
+                autocomplete="email"
+                placeholder="you@example.com"
+                required
+            >
+
+            <label for="authPassword">Password</label>
+
+            <input
+                id="authPassword"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                placeholder="At least 8 characters"
+                required
+            >
+
+            <button
+                id="authSubmit"
+                class="primary-button"
+                type="submit"
+            >
+                Create account
+            </button>
+
+        </form>
+
+        <button id="authSwitch" class="text-button" type="button">
+            Already have an account? Log in
+        </button>
+
+        <p id="authMessage" class="auth-message" aria-live="polite"></p>
+
+    </div>
+
+</section>
+
         <section class="welcome">
             <p class="eyebrow">YOUR NEXT OPPORTUNITY STARTS HERE</p>
 
