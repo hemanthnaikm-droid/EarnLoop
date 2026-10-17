@@ -130,11 +130,7 @@ document.querySelectorAll(".category").forEach(button => {
             item.classList.toggle("active", item === button);
         });
 
-        getTaskCards().forEach(card => {
-            card.hidden =
-                category !== "all" &&
-                card.dataset.category !== category;
-        });
+        applyTaskFilter();
     });
 });
 
