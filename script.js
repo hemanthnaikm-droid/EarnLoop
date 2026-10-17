@@ -1,3 +1,22 @@
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+    collection,
+    doc,
+    setDoc,
+    addDoc,
+    serverTimestamp,
+    onSnapshot,
+    query,
+    orderBy
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+import { auth, db, authReady } from "./firebase.js";
 const taskList = document.getElementById("taskList");
 const taskModal = document.getElementById("taskModal");
 
@@ -478,20 +497,17 @@ createTaskForm.addEventListener("submit", async event => {
 
 /* START AND STOP REAL-TIME LISTENING */
 
-onAuthStateChanged(auth, user => {
-    if (user) {
-        startTaskListener();
-    } else {
-        if (stopTaskListener) {
-            stopTaskListener();
-            stopTaskListener = null;
-        }
-
-        firebaseTasks = [];
-        renderFirebaseTasks();
+if (user) {
+    startTaskListener();
+} else {
+    if (stopTaskListener) {
+        stopTaskListener();
+        stopTaskListener = null;
     }
-});
 
+    firebaseTasks = [];
+    renderFirebaseTasks();
+}
 
 /* ===================================
    EARNLOOP AUTHENTICATION
