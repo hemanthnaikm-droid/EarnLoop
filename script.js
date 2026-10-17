@@ -5,16 +5,21 @@ import {
     onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
+
 import {
     collection,
     doc,
     setDoc,
     addDoc,
+    getDoc,
     serverTimestamp,
     onSnapshot,
     query,
-    orderBy
+    orderBy,
+    where,
+    updateDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
 
 import { auth, db, authReady } from "./firebase.js";
 const taskList = document.getElementById("taskList");
@@ -32,6 +37,7 @@ const pendingElement = document.getElementById("pendingBalance");
 const createSection = document.getElementById("createSection");
 const createTaskForm = document.getElementById("createTaskForm");
 const createMessage = document.getElementById("createMessage");
+const applicationsSection = document.getElementById("applicationsSection");
 
 let currentTask = null;
 let completedTasks = 0;
@@ -234,8 +240,30 @@ document.querySelectorAll(".nav-item").forEach(button => {
         if (page === "explore") showExplore();
         if (page === "create") showCreate();
         if (page === "wallet") showWallet();
+        if (page === "applications") showApplications();
     });
 });
+
+
+
+function showApplications() {
+    document.querySelector(".welcome").hidden = true;
+    document.querySelector(".wallet-card").hidden = true;
+    document.querySelector(".how-it-works").hidden = true;
+
+    document.querySelectorAll(".section").forEach(section => {
+        section.hidden = true;
+    });
+
+    createSection.hidden = true;
+    applicationsSection.hidden = false;
+
+    applicationsSection.scrollIntoView({
+        behavior: "smooth"
+    });
+}
+
+
 
 /* ===================================
    FIREBASE TASK MARKETPLACE
@@ -243,7 +271,8 @@ document.querySelectorAll(".nav-item").forEach(button => {
 
 let firebaseTasks = [];
 let stopTaskListener = null;
-
+let currentFirebaseTask = null;
+let stopApplicationsListener = null;
 const taskIcons = {
     digital: "🌐",
     skills: "✍️",
@@ -332,7 +361,10 @@ function applyTaskFilter() {
 }
 
 function openFirebaseTask(task) {
+    
+
     currentTask = null;
+    currentFirebaseTask = task;
 
     modalTitle.textContent = task.title;
     modalDescription.textContent =
@@ -352,8 +384,270 @@ function openFirebaseTask(task) {
     completeButton.disabled = true;
     completeButton.textContent = "Not available yet";
 
+    const applicationActions =
+        document.querySelector(".application-actions");
+
+    const applyButton =
+        document.getElementById("applyTaskButton");
+
+    const applicationMessage =
+        document.getElementById("applicationMessage");
+
+    applicationMessage.textContent = "";
+
+    document.getElementById(
+        "applicationMessageInput"
+    ).value = "";
+
+    // Owners cannot apply to their own tasks.
+    const isOwner =
+        authenticatedUser &&
+        authenticatedUser.uid === task.ownerId;
+
+    applicationActions.hidden = !authenticatedUser || isOwner;
+    applyButton.disabled = false;
+    applyButton.textContent = "Apply for this task";
+
     taskModal.hidden = false;
+
 }
+
+
+document.getElementById("applyTaskButton")
+    .addEventListener("click", async () => {
+        const task = currentFirebaseTask;
+        const user = auth.currentUser;
+
+        const messageElement =
+            document.getElementById("applicationMessage");
+
+        const applyButton =
+            document.getElementById("applyTaskButton");
+
+        const messageInput =
+            document.getElementById("applicationMessageInput");
+
+        if (!user || !task) {
+            messageElement.textContent =
+                "Please log in and reopen this task.";
+            return;
+        }
+
+        if (user.uid === task.ownerId) {
+            messageElement.textContent =
+                "You cannot apply to your own task.";
+            return;
+        }
+
+        if (task.status !== "open") {
+            messageElement.textContent =
+                "This task is not open for applications.";
+            return;
+        }
+
+        const message = messageInput.value.trim();
+
+        if (message.length < 10 || message.length > 500) {
+            messageElement.textContent =
+                "Your message must contain 10–500 characters.";
+            return;
+        }
+
+        applyButton.disabled = true;
+        messageElement.textContent = "Submitting application...";
+
+        try {
+            await authReady;
+
+            const applicationId = task.id + "_" + user.uid;
+            const applicationRef = doc(
+                db,
+                "applications",
+                applicationId
+            );
+
+            const existing = await getDoc(applicationRef);
+
+            if (existing.exists()) {
+                messageElement.textContent =
+                    "You have already applied to this task.";
+                return;
+            }
+
+            await setDoc(applicationRef, {
+                taskId: task.id,
+                taskTitle: task.title,
+                ownerId: task.ownerId,
+                applicantId: user.uid,
+                applicantEmail: user.email,
+                message: message,
+                status: "pending",
+                createdAt: serverTimestamp()
+            });
+
+            messageElement.textContent =
+                "Application submitted! The task owner can review it.";
+
+            messageInput.value = "";
+        } catch (error) {
+            console.error("Application submission failed:", error);
+
+            messageElement.textContent =
+                error.code === "permission-denied"
+                    ? "Application denied by Firestore rules. Check the rules and task status."
+                    : "Unable to submit: " + error.message;
+        } finally {
+            applyButton.disabled = false;
+        }
+    });
+
+
+    
+function startApplicationsListener(user) {
+    if (stopApplicationsListener) {
+        stopApplicationsListener();
+        stopApplicationsListener = null;
+    }
+
+    const applicationsList =
+        document.getElementById("applicationsList");
+
+    const applicationsMessage =
+        document.getElementById("applicationsMessage");
+
+    applicationsList.replaceChildren();
+
+    if (!user) {
+        applicationsMessage.textContent =
+            "Log in to review applications for your tasks.";
+        return;
+    }
+
+    applicationsMessage.textContent = "Loading applications...";
+
+    const ownerQuery = query(
+        collection(db, "applications"),
+        where("ownerId", "==", user.uid)
+    );
+
+    stopApplicationsListener = onSnapshot(
+        ownerQuery,
+        snapshot => {
+            applicationsList.replaceChildren();
+
+            if (snapshot.empty) {
+                applicationsMessage.textContent =
+                    "No applications for your tasks yet.";
+                return;
+            }
+
+            applicationsMessage.textContent =
+                snapshot.size + " application(s)";
+
+            const applications = snapshot.docs
+                .map(item => ({
+                    id: item.id,
+                    ...item.data()
+                }))
+                .sort((a, b) => {
+                    const timeA = a.createdAt?.toMillis?.() || 0;
+                    const timeB = b.createdAt?.toMillis?.() || 0;
+                    return timeB - timeA;
+                });
+
+            applications.forEach(application => {
+                const card = document.createElement("article");
+                card.className = "application-card";
+
+                const title = document.createElement("h3");
+                title.textContent = application.taskTitle;
+
+                const applicant = document.createElement("p");
+                applicant.textContent =
+                    "Applicant: " + application.applicantEmail;
+
+                const message = document.createElement("p");
+                message.textContent =
+                    "Message: " + application.message;
+
+                const status = document.createElement("span");
+                status.className = "application-status";
+                status.textContent =
+                    "Status: " + application.status;
+
+                card.append(title, applicant, message, status);
+
+                if (application.status === "pending") {
+                    const actions = document.createElement("div");
+                    actions.className = "application-review-actions";
+
+                    const acceptButton =
+                        document.createElement("button");
+
+                    acceptButton.type = "button";
+                    acceptButton.className =
+                        "application-review-button accept";
+                    acceptButton.textContent = "Accept";
+
+                    const rejectButton =
+                        document.createElement("button");
+
+                    rejectButton.type = "button";
+                    rejectButton.className =
+                        "application-review-button reject";
+                    rejectButton.textContent = "Reject";
+
+                    async function reviewApplication(newStatus) {
+                        acceptButton.disabled = true;
+                        rejectButton.disabled = true;
+
+                        try {
+                            await updateDoc(
+                                doc(db, "applications", application.id),
+                                {
+                                    status: newStatus,
+                                    reviewedAt: serverTimestamp()
+                                }
+                            );
+                        } catch (error) {
+                            console.error(
+                                "Application review failed:",
+                                error
+                            );
+
+                            applicationsMessage.textContent =
+                                "Unable to update application: " +
+                                error.message;
+
+                            acceptButton.disabled = false;
+                            rejectButton.disabled = false;
+                        }
+                    }
+
+                    acceptButton.addEventListener("click", () => {
+                        reviewApplication("accepted");
+                    });
+
+                    rejectButton.addEventListener("click", () => {
+                        reviewApplication("rejected");
+                    });
+
+                    actions.append(acceptButton, rejectButton);
+                    card.appendChild(actions);
+                }
+
+                applicationsList.appendChild(card);
+            });
+        },
+        error => {
+            console.error("Application loading failed:", error);
+
+            applicationsMessage.textContent =
+                "Unable to load applications: " + error.message;
+        }
+    );
+}
+
 
 function startTaskListener() {
     if (stopTaskListener) {
@@ -499,6 +793,9 @@ createTaskForm.addEventListener("submit", async event => {
 /* START AND STOP REAL-TIME LISTENING */
 
 onAuthStateChanged(auth, user => {
+    startApplicationsListener(user);
+
+
     if (user) {
         startTaskListener();
     } else {

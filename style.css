@@ -564,3 +564,105 @@ h1 {
 [hidden] {
     display: none !important;
 }
+
+/* EARNLOOP STAGE 2: APPLICATIONS */
+
+.application-actions {
+    margin-top: 18px;
+    display: grid;
+    gap: 10px;
+}
+
+.application-actions[hidden],
+#applicationsSection[hidden] {
+    display: none !important;
+}
+
+#applicationMessageInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #343b4a;
+    background: #151922;
+    color: #fff;
+    font: inherit;
+    resize: vertical;
+}
+
+#applyTaskButton,
+.application-review-button {
+    border: 0;
+    border-radius: 10px;
+    padding: 11px 15px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#applyTaskButton {
+    background: #38d9a9;
+    color: #07130f;
+}
+
+#applyTaskButton:disabled,
+.application-review-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+#applicationMessage,
+#applicationsMessage {
+    font-size: 0.92rem;
+    overflow-wrap: anywhere;
+}
+
+#applicationsSection {
+    padding: 20px 0 100px;
+}
+
+.applications-intro {
+    color: #aeb7c8;
+}
+
+.application-card {
+    margin: 14px 0;
+    padding: 16px;
+    border: 1px solid #343b4a;
+    border-radius: 14px;
+    background: #171c27;
+    overflow-wrap: anywhere;
+}
+
+.application-card h3 {
+    margin-top: 0;
+}
+
+.application-card p {
+    line-height: 1.5;
+}
+
+.application-status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 20px;
+    background: #293244;
+    font-size: 0.85rem;
+}
+
+.application-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.application-review-button.accept {
+    background: #38d9a9;
+    color: #07130f;
+}
+
+.application-review-button.reject {
+    background: #ff7272;
+    color: #260707;
+}

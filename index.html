@@ -285,6 +285,21 @@
 
         </section>
 
+        
+<section id="applicationsSection" hidden>
+    <h2>Task Applications</h2>
+    <p class="applications-intro">
+        Review applications submitted to tasks you posted.
+    </p>
+
+    <p id="applicationsMessage" role="status" aria-live="polite">
+        Loading your applications...
+    </p>
+
+    <div id="applicationsList"></div>
+</section>
+
+
         <!-- CREATE TASK SECTION -->
 <section id="createSection" class="section" hidden>
     <p class="eyebrow">CREATE AN OPPORTUNITY</p>
@@ -359,6 +374,12 @@
             <span>◉</span>
             <small>Explore</small>
         </button>
+        
+        <button class="nav-item" data-page="applications" type="button">
+            <span>📨</span>
+            <span>Applications</span>
+        </button>
+
 
         <button class="nav-item" data-page="create">
             <span>＋</span>
@@ -399,6 +420,26 @@
             </p>
 
             <button id="demoComplete" class="primary-button">
+                
+<div class="application-actions">
+    <label for="applicationMessageInput">
+        Why are you suitable for this task?
+    </label>
+
+    <textarea
+        id="applicationMessageInput"
+        maxlength="500"
+        rows="3"
+        placeholder="Briefly describe your skills or approach..."
+    ></textarea>
+
+    <button id="applyTaskButton" type="button">
+        Apply for this task
+    </button>
+
+    <p id="applicationMessage" role="status" aria-live="polite"></p>
+</div>
+
                 Simulate completion
             </button>
 
