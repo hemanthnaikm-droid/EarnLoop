@@ -515,7 +515,7 @@ if (user) {
 
 
 
-import { auth, db, authReady } from "./firebase.js";
+
 
 const authSection = document.getElementById("authSection");
 const authForm = document.getElementById("authForm");
