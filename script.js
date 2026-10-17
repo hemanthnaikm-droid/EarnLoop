@@ -335,3 +335,240 @@ createTaskForm.addEventListener("submit", event => {
 });
 
 pendingElement.textContent = formatRupees(0);
+
+
+/* ===================================
+   EARNLOOP AUTHENTICATION
+=================================== */
+
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+} from
+    "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+import {
+    doc,
+    setDoc,
+    serverTimestamp
+} from
+    "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+import { auth, db, authReady } from "./firebase.js";
+
+const authSection = document.getElementById("authSection");
+const authForm = document.getElementById("authForm");
+const authHeading = document.getElementById("authHeading");
+const authDescription = document.getElementById("authDescription");
+const authSubmit = document.getElementById("authSubmit");
+const authSwitch = document.getElementById("authSwitch");
+const authMessage = document.getElementById("authMessage");
+const profileButton = document.getElementById("profileButton");
+
+let authMode = "register";
+let authenticatedUser = null;
+let authInitialized = false;
+
+function showAuthScreen() {
+    authSection.hidden = false;
+
+    document.querySelector(".welcome").hidden = true;
+    document.querySelector(".wallet-card").hidden = true;
+    document.querySelector(".how-it-works").hidden = true;
+
+    document.querySelectorAll(".section").forEach(section => {
+        section.hidden = true;
+    });
+
+    authSection.scrollIntoView({ behavior: "smooth" });
+}
+
+function hideAuthScreen() {
+    authSection.hidden = true;
+}
+
+function updateAuthMode() {
+    const registering = authMode === "register";
+
+    authHeading.textContent = registering
+        ? "Create your account"
+        : "Welcome back";
+
+    authDescription.textContent = registering
+        ? "Join EarnLoop to explore opportunities."
+        : "Log in to access your EarnLoop account.";
+
+    authSubmit.textContent = registering
+        ? "Create account"
+        : "Log in";
+
+    authSwitch.textContent = registering
+        ? "Already have an account? Log in"
+        : "New to EarnLoop? Create an account";
+
+    document.getElementById("authPassword").autocomplete =
+        registering ? "new-password" : "current-password";
+
+    authMessage.textContent = "";
+}
+
+authSwitch.addEventListener("click", () => {
+    authMode = authMode === "register"
+        ? "login"
+        : "register";
+
+    updateAuthMode();
+});
+
+profileButton.addEventListener("click", async () => {
+    if (authenticatedUser) {
+        const shouldLogout = confirm(
+            "Log out of EarnLoop?"
+        );
+
+        if (!shouldLogout) return;
+
+        try {
+            await signOut(auth);
+        } catch (error) {
+            alert("Unable to log out. Please try again.");
+        }
+
+        return;
+    }
+
+    authMode = "register";
+    updateAuthMode();
+    showAuthScreen();
+});
+
+authForm.addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (authSubmit.disabled) return;
+
+    const email = document.getElementById("authEmail")
+        .value.trim();
+
+    const password = document.getElementById("authPassword")
+        .value;
+
+    if (password.length < 8) {
+        authMessage.textContent =
+            "Use a password containing at least 8 characters.";
+        return;
+    }
+
+    authSubmit.disabled = true;
+    authMessage.textContent = "Please wait...";
+
+    try {
+        await authReady;
+
+        if (authMode === "register") {
+            const credential =
+                await createUserWithEmailAndPassword(
+                    auth,
+                    email,
+                    password
+                );
+
+            /*
+             * The profile write is attempted after account creation.
+             * If Firestore denies this write, authentication may still
+             * succeed. We report that separately.
+             */
+            try {
+                await setDoc(
+                    doc(db, "users", credential.user.uid),
+                    {
+                        email: credential.user.email,
+                        createdAt: serverTimestamp(),
+                        role: "user"
+                    }
+                );
+            } catch (profileError) {
+                console.error(
+                    "Profile creation failed:",
+                    profileError
+                );
+
+                authMessage.textContent =
+                    "Your account was created, but the profile " +
+                    "could not be saved. Check Firestore rules.";
+                return;
+            }
+
+            authMessage.textContent =
+                "Account created successfully.";
+        } else {
+            await signInWithEmailAndPassword(
+                auth,
+                email,
+                password
+            );
+
+            authMessage.textContent =
+                "Logged in successfully.";
+        }
+    } catch (error) {
+        console.error("Authentication error:", error);
+
+        const messages = {
+            "auth/email-already-in-use":
+                "This email already has an account. Please log in.",
+
+            "auth/invalid-email":
+                "Enter a valid email address.",
+
+            "auth/invalid-credential":
+                "Email or password is incorrect.",
+
+            "auth/weak-password":
+                "Choose a stronger password.",
+
+            "auth/network-request-failed":
+                "Network error. Check your internet connection.",
+
+            "permission-denied":
+                "Firestore access was denied. Rules need configuration."
+        };
+
+        authMessage.textContent =
+            messages[error.code] ||
+            "Unable to complete the request. Please try again.";
+    } finally {
+        authSubmit.disabled = false;
+    }
+});
+
+onAuthStateChanged(auth, async user => {
+    authenticatedUser = user;
+
+    if (!user) {
+        profileButton.textContent = "👤";
+    } else {
+        profileButton.textContent = "↪";
+    }
+
+    if (!authInitialized) {
+        authInitialized = true;
+    }
+
+    if (user) {
+        hideAuthScreen();
+
+        document.querySelector(".welcome").hidden = false;
+        document.querySelector(".wallet-card").hidden = false;
+
+        document.querySelectorAll(".section").forEach(section => {
+            section.hidden = false;
+        });
+
+        document.querySelector(".how-it-works").hidden = false;
+    }
+});
+
+updateAuthMode();
