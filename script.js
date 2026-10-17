@@ -495,19 +495,22 @@ createTaskForm.addEventListener("submit", async event => {
     }
 });
 
+
 /* START AND STOP REAL-TIME LISTENING */
 
-if (user) {
-    startTaskListener();
-} else {
-    if (stopTaskListener) {
-        stopTaskListener();
-        stopTaskListener = null;
-    }
+onAuthStateChanged(auth, user => {
+    if (user) {
+        startTaskListener();
+    } else {
+        if (stopTaskListener) {
+            stopTaskListener();
+            stopTaskListener = null;
+        }
 
-    firebaseTasks = [];
-    renderFirebaseTasks();
-}
+        firebaseTasks = [];
+        renderFirebaseTasks();
+    }
+});
 
 /* ===================================
    EARNLOOP AUTHENTICATION
