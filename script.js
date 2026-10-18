@@ -56,6 +56,7 @@ const callCreateTask = httpsCallable(functions, "createTask");
 const callCreateApplication = httpsCallable(functions, "createApplication");
 const callCreateSubmission = httpsCallable(functions, "createSubmission");
 const callCreateReport = httpsCallable(functions, "createReport");
+const callCreateTaskFundingOrder = httpsCallable(functions, "createTaskFundingOrder");
 
 // Trust & Safety helpers: render Firestore timestamps safely.
 function formatAuditTime(value) {
@@ -398,8 +399,8 @@ function renderFirebaseTasks() {
         fundingStatus.className = "funding-status";
         // Phase 1 has no trusted payment verification backend, so all
         // rewards remain labelled unfunded regardless of client-side data.
-        fundingStatus.textContent = "NOT FUNDED · No payment guaranteed";
-        fundingStatus.dataset.funded = "false";
+        fundingStatus.textContent = task.funded === true ? "FUNDED · Provider confirmed" : "NOT FUNDED · No payment guaranteed";
+        fundingStatus.dataset.funded = task.funded === true ? "true" : "false";
 
         rewardBox.append(label, reward, fundingStatus);
 
@@ -476,9 +477,17 @@ function openFirebaseTask(task) {
     modalReward.textContent =
         "Proposed reward: ₹" + task.proposedReward + " · NOT FUNDED";
 
-    modalMessage.textContent =
-        "This task is not funded. The proposed reward is not guaranteed, " +
-        "and no cash payment is currently promised.";
+    modalMessage.textContent = task.funded === true
+        ? "Funding has been confirmed by the payment provider. Reward payment to workers is still subject to the platform's separate payout process."
+        : "This task is not funded. The proposed reward is not guaranteed until the customer completes payment.";
+    const fundButton = document.getElementById("fundTaskButton");
+    const fundingMessage = document.getElementById("fundingMessage");
+    if (fundButton) {
+        fundButton.hidden = !authenticatedUser || authenticatedUser.uid !== task.ownerId || task.funded === true;
+        fundButton.disabled = false;
+        fundButton.textContent = "Fund this task securely";
+    }
+    if (fundingMessage) fundingMessage.textContent = "";
 
     const completeButton =
         document.getElementById("demoComplete");
@@ -514,6 +523,56 @@ function openFirebaseTask(task) {
 
 }
 
+
+const fundTaskButton = document.getElementById("fundTaskButton");
+if (fundTaskButton) fundTaskButton.addEventListener("click", async () => {
+    const task = currentFirebaseTask;
+    const user = auth.currentUser;
+    const message = document.getElementById("fundingMessage");
+    if (!user || !task || user.uid !== task.ownerId) {
+        if (message) message.textContent = "Sign in as the task owner to fund this task.";
+        return;
+    }
+    if (task.funded === true) {
+        if (message) message.textContent = "This task is already funded.";
+        return;
+    }
+    if (typeof window.Razorpay !== "function") {
+        if (message) message.textContent = "Payment checkout could not load. Refresh and try again.";
+        return;
+    }
+    fundTaskButton.disabled = true;
+    if (message) message.textContent = "Creating a secure payment order...";
+    try {
+        const result = await callCreateTaskFundingOrder({ taskId: task.id });
+        const order = result.data;
+        const checkout = new window.Razorpay({
+            key: order.keyId,
+            amount: order.amount,
+            currency: order.currency,
+            name: "EarnLoop",
+            description: `Fund task: ${order.taskTitle}`,
+            order_id: order.orderId,
+            handler: function () {
+                if (message) message.textContent = "Payment response received. Waiting for verified provider confirmation; the task will show as funded only after the server confirms capture.";
+                fundTaskButton.disabled = true;
+            },
+            modal: { ondismiss: function () { fundTaskButton.disabled = false; if (message) message.textContent = "Checkout closed. If you completed payment, wait for provider confirmation before retrying."; } },
+            prefill: { email: user.email || "" },
+            theme: { color: "#6d5efc" }
+        });
+        checkout.on("payment.failed", function (response) {
+            fundTaskButton.disabled = false;
+            if (message) message.textContent = "Payment failed or was cancelled. No funding was confirmed.";
+            console.warn("Razorpay payment failed", response?.error?.code || "unknown");
+        });
+        checkout.open();
+    } catch (error) {
+        fundTaskButton.disabled = false;
+        if (message) message.textContent = error?.message || "Could not start payment. Please try again later.";
+        console.error("Task funding order failed", error);
+    }
+});
 
 document.getElementById("applyTaskButton")
     .addEventListener("click", async () => {
