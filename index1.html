@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <meta name="theme-color" content="#10131c">
+
+    <title>EarnLoop — Every Small Action Has Value</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header class="topbar">
+        <a href="#" class="brand">
+            <span class="brand-icon">E</span>
+            <span>Earn<span class="accent">Loop</span></span>
+        </a>
+
+        <button
+    id="profileButton"
+    class="profile-button"
+    aria-label="Account"
+>
+    👤
+        </button>
+    </header>
+
+    <main>
+
+        <!-- AUTHENTICATION SECTION -->
+<section id="authSection" class="auth-section" hidden>
+
+    <div class="auth-card">
+
+        <div class="auth-logo">E</div>
+
+        <p class="eyebrow">WELCOME TO EARNLOOP</p>
+
+        <h2 id="authHeading">Create your account</h2>
+
+        <p id="authDescription" class="description">
+            Join EarnLoop to explore opportunities.
+        </p>
+
+        <form id="authForm">
+
+            <label for="authEmail">Email address</label>
+
+            <input
+                id="authEmail"
+                type="email"
+                autocomplete="email"
+                placeholder="you@example.com"
+                required
+            >
+
+            <label for="authPassword">Password</label>
+
+            <input
+                id="authPassword"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                placeholder="At least 8 characters"
+                required
+            >
+
+            <button
+                id="authSubmit"
+                class="primary-button"
+                type="submit"
+            >
+                Create account
+            </button>
+
+        </form>
+
+        <button id="authSwitch" class="text-button" type="button">
+            Already have an account? Log in
+        </button>
+
+        <p id="authMessage" class="auth-message" aria-live="polite"></p>
+
+    </div>
+
+</section>
+
+        <section class="welcome">
+            <p class="eyebrow">YOUR NEXT OPPORTUNITY STARTS HERE</p>
+
+            <h1>Small tasks.<br>
+                <span class="accent">Real rewards.</span>
+            </h1>
+
+            <p class="description">
+                Discover useful tasks, put your abilities to work,
+                and get rewarded for completed work.
+            </p>
+        </section>
+
+        <section class="wallet-card">
+
+            <div class="wallet-heading">
+                <span>MY EARNINGS</span>
+                <span class="demo-badge">DEMO</span>
+            </div>
+
+            <h2 id="balance">₹0.00</h2>
+
+            <p class="wallet-note">
+                Test balance · Not withdrawable
+            </p>
+
+            <div class="wallet-footer">
+                <div>
+                    <span class="stat-label">Completed tasks</span>
+                    <strong id="completedCount">0</strong>
+                </div>
+
+                <div>
+                    <span class="stat-label">Pending rewards</span>
+                    <strong id="pendingBalance">₹0.00</strong>
+                </div>
+            </div>
+
+        </section>
+
+        <section class="section">
+
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">FIND YOUR NEXT TASK</p>
+                    <h2>Explore opportunities</h2>
+                </div>
+            </div>
+
+            <div class="category-list">
+                <button class="category active"
+                        data-category="all">All</button>
+
+                <button class="category"
+                        data-category="digital">Digital</button>
+
+                <button class="category"
+                        data-category="skills">Skills</button>
+
+                <button class="category"
+                        data-category="local">Local</button>
+            </div>
+
+            <div id="taskList" class="task-list">
+
+                <article class="task-card"
+                         data-category="digital">
+
+                    <div class="task-top">
+                        <span class="task-icon">🌐</span>
+                        <span class="task-type">DIGITAL</span>
+                    </div>
+
+                    <h3>Test a Website</h3>
+
+                    <p>
+                        Explore a website and report usability
+                        problems with clear feedback.
+                    </p>
+
+                    <div class="task-footer">
+                        <div>
+                            <span class="reward-label">Example reward</span>
+                            <strong class="reward">₹20</strong>
+                        </div>
+
+                        <button class="task-button"
+                                data-task="Test a Website"
+                                data-reward="20">
+                            View task
+                        </button>
+                    </div>
+
+                </article>
+
+                <article class="task-card"
+                         data-category="skills">
+
+                    <div class="task-top">
+                        <span class="task-icon">✍️</span>
+                        <span class="task-type">SKILLS</span>
+                    </div>
+
+                    <h3>Write a Caption</h3>
+
+                    <p>
+                        Create a short, engaging caption for
+                        a business's social media post.
+                    </p>
+
+                    <div class="task-footer">
+                        <div>
+                            <span class="reward-label">Example reward</span>
+                            <strong class="reward">₹15</strong>
+                        </div>
+
+                        <button class="task-button"
+                                data-task="Write a Caption"
+                                data-reward="15">
+                            View task
+                        </button>
+                    </div>
+
+                </article>
+
+                <article class="task-card"
+                         data-category="local">
+
+                    <div class="task-top">
+                        <span class="task-icon">📍</span>
+                        <span class="task-type">LOCAL</span>
+                    </div>
+
+                    <h3>Verify Business Details</h3>
+
+                    <p>
+                        Help verify publicly available business
+                        information and report corrections.
+                    </p>
+
+                    <div class="task-footer">
+                        <div>
+                            <span class="reward-label">Example reward</span>
+                            <strong class="reward">₹10</strong>
+                        </div>
+
+                        <button class="task-button"
+                                data-task="Verify Business Details"
+                                data-reward="10">
+                            View task
+                        </button>
+                    </div>
+
+                </article>
+
+            </div>
+
+            <p class="demo-notice">
+                These are sample tasks for development.
+                No customer has funded them, and they do not
+                currently pay real money.
+            </p>
+
+        </section>
+
+        <section class="how-it-works">
+
+            <p class="eyebrow">SIMPLE BY DESIGN</p>
+            <h2>How EarnLoop works</h2>
+
+            <div class="step">
+                <span>01</span>
+                <div>
+                    <h3>Find a task</h3>
+                    <p>Discover an opportunity that suits you.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <span>02</span>
+                <div>
+                    <h3>Complete the work</h3>
+                    <p>Follow the instructions and submit your result.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <span>03</span>
+                <div>
+                    <h3>Get rewarded</h3>
+                    <p>Receive payment when funded work is approved.</p>
+                </div>
+            </div>
+
+        </section>
+
+        
+<section id="applicationsSection" hidden>
+    <h2>Task Applications</h2>
+    <p class="applications-intro">
+        Review applications submitted to tasks you posted.
+    </p>
+
+    <p id="applicationsMessage" role="status" aria-live="polite">
+        Loading your applications...
+    </p>
+
+    <div id="applicationsList"></div>
+</section>
+
+
+        <!-- CREATE TASK SECTION -->
+<section id="createSection" class="section" hidden>
+    <p class="eyebrow">CREATE AN OPPORTUNITY</p>
+    <h2>Post a task</h2>
+
+    <p class="description">
+        Describe useful work that someone can complete for a reward.
+    </p>
+
+    <form id="createTaskForm" class="create-form">
+
+        <label for="taskTitle">Task title</label>
+        <input
+            id="taskTitle"
+            type="text"
+            maxlength="70"
+            placeholder="e.g. Write a Kannada caption"
+            required
+        >
+
+        <label for="taskDescription">Task description</label>
+        <textarea
+            id="taskDescription"
+            rows="4"
+            maxlength="1000"
+            placeholder="Explain what the worker needs to do..."
+            required
+        ></textarea>
+
+        <label for="taskCategory">Category</label>
+        <select id="taskCategory" required>
+            <option value="digital">Digital</option>
+            <option value="skills">Skills</option>
+            <option value="local">Local</option>
+        </select>
+
+        <label for="taskReward">Proposed reward (₹)</label>
+        <input
+            id="taskReward"
+            type="number"
+            min="1"
+            max="10000"
+            step="1"
+            placeholder="20"
+            required
+        >
+
+        <button type="submit" class="primary-button">
+            Publish demo task
+        </button>
+
+        <p class="demo-notice">
+            Demo mode: publishing a task does not fund its reward
+            or guarantee payment to a worker.
+        </p>
+
+        <p id="createMessage" aria-live="polite"></p>
+
+    </form>
+</section>
+
+    </main>
+
+    <nav class="bottom-nav" aria-label="Main navigation">
+
+        <button class="nav-item selected" data-page="home">
+            <span>⌂</span>
+            <small>Home</small>
+        </button>
+
+        <button class="nav-item" data-page="explore">
+            <span>◉</span>
+            <small>Explore</small>
+        </button>
+        
+        <button class="nav-item" data-page="applications" type="button">
+            <span>📨</span>
+            <span>Applications</span>
+        </button>
+
+
+        <button class="nav-item" data-page="create">
+            <span>＋</span>
+            <small>Create</small>
+        </button>
+
+        <button class="nav-item" data-page="wallet">
+            <span>▤</span>
+            <small>Wallet</small>
+        </button>
+
+    </nav>
+
+    <div id="taskModal"
+         class="modal"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="modalTitle"
+         hidden>
+
+        <div class="modal-content">
+
+            <button id="closeModal"
+                    class="close-button"
+                    aria-label="Close">✕</button>
+
+            <p class="eyebrow">SAMPLE OPPORTUNITY</p>
+
+            <h2 id="modalTitle">Task details</h2>
+
+            <p id="modalDescription"></p>
+
+            <p id="modalReward" class="modal-reward"></p>
+
+            <p class="demo-notice">
+                This is a demonstration only. No real payment
+                is available for this task.
+            </p>
+
+
+<button id="demoComplete" class="primary-button" type="button">
+    Simulate completion
+</button>
+
+<div class="application-actions" hidden>
+    <label for="applicationMessageInput">
+        Why are you suitable for this task?
+    </label>
+
+    <textarea
+        id="applicationMessageInput"
+        maxlength="500"
+        rows="3"
+        placeholder="Briefly describe your skills or approach..."
+    ></textarea>
+
+    <button id="applyTaskButton" type="button">
+        Apply for this task
+    </button>
+
+    <p
+        id="applicationMessage"
+        role="status"
+        aria-live="polite"
+    ></p>
+</div>
+
+<p
+    id="modalMessage"
+    class="modal-message"
+    aria-live="polite"
+></p>
+
+
+        </div>
+
+    </div>
+
+    <script type="module" src="script.js"></script>
+
+</body>
+  </html>

@@ -110,26 +110,6 @@ function openTask(button) {
 }
 
 
-    modalTitle.textContent = currentTask.title;
-    modalDescription.textContent = currentTask.description;
-
-    modalReward.textContent =
-        "Proposed reward: " + formatRupees(currentTask.reward);
-
-    modalMessage.textContent = "";
-
-    const completeButton = document.getElementById("demoComplete");
-
-    completeButton.disabled = completedTaskIds.has(currentTask.id);
-
-    completeButton.textContent =
-        completedTaskIds.has(currentTask.id)
-            ? "Already simulated"
-            : "Simulate completion";
-
-    taskModal.hidden = false;
-}
-
 function closeTask() {
     taskModal.hidden = true;
     currentTask = null;
@@ -581,8 +561,8 @@ function startApplicationsListener(user) {
 
             const applications = snapshot.docs
                 .map(item => ({
-                    id: item.id,
-                    ...item.data()
+                    ...item.data(),
+                    id: item.id
                 }))
                 .sort((a, b) => {
                     const timeA = a.createdAt?.toMillis?.() || 0;
@@ -699,8 +679,8 @@ function startTaskListener() {
         tasksQuery,
         snapshot => {
             firebaseTasks = snapshot.docs.map(document => ({
-                id: document.id,
-                ...document.data()
+                ...document.data(),
+                id: document.id
             }));
 
             renderFirebaseTasks();
@@ -839,12 +819,8 @@ onAuthStateChanged(auth, user => {
             stopTaskListener = null;
         }
 
-        firebaseTasks = snapshot.docs.map(document => ({
-            ...document.data(),
-            id: document.id
-     }));
-
-     renderFirebaseTasks();
+        firebaseTasks = [];
+        renderFirebaseTasks();
     }
 });
 
