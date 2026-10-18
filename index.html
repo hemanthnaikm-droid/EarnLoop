@@ -298,7 +298,45 @@
     </p>
 
     <div id="applicationsList"></div>
+
+    <h2 class="my-updates-heading">My application updates</h2>
+    <p id="myApplicationsMessage" role="status" aria-live="polite">
+        Your application decisions will appear here.
+    </p>
+    <div id="myApplicationsList"></div>
 </section>
+
+<div id="notificationToast" class="notification-toast" role="status"
+     aria-live="polite" aria-atomic="true" hidden></div>
+
+<style>
+.my-updates-heading { margin-top: 2rem; }
+.application-notification-card {
+    margin: 0.75rem 0;
+    padding: 1rem;
+    border: 1px solid #34394a;
+    border-radius: 12px;
+    background: #171b27;
+}
+.application-notification-card p { margin: 0.45rem 0 0; }
+.application-notification-card .decision-accepted { color: #62d99a; }
+.application-notification-card .decision-rejected { color: #ff8585; }
+.notification-toast {
+    position: fixed;
+    z-index: 9999;
+    left: 50%;
+    bottom: 6rem;
+    transform: translateX(-50%);
+    width: min(92vw, 440px);
+    padding: 1rem 1.1rem;
+    border: 1px solid #42495d;
+    border-radius: 14px;
+    background: #202638;
+    color: #fff;
+    box-shadow: 0 12px 36px rgba(0,0,0,.35);
+}
+.notification-toast[hidden] { display: none; }
+</style>
 
 
         <!-- CREATE TASK SECTION -->
