@@ -2,6 +2,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
+const logger = require('firebase-functions/logger');
 
 initializeApp();
 const db = getFirestore();
@@ -181,6 +182,7 @@ exports.requestAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     reviewedAt: null, reviewedBy: null, processingStartedAt: null, completedAt: null,
     failureCode: null,
   });
+  logger.info('account_deletion_requested', { actorUid: uid, targetUid: uid, status, openDisputeCount: disputes.length });
   await writeSecurityAudit('account_deletion_requested', uid, uid, { status, openDisputeCount: disputes.length });
   return { status, openDisputeCount: disputes.length, alreadyRequested: false };
 });
@@ -207,6 +209,7 @@ exports.reviewAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
   }
   const status = decision === 'approve' ? 'approved' : decision === 'hold' ? 'needs_review' : 'rejected';
   await ref.update({ status, holdReason: decision === 'hold' ? 'admin_review' : null, reviewNote: typeof note === 'string' ? note.slice(0, 500) : null, reviewedAt: FieldValue.serverTimestamp(), reviewedBy: request.auth.uid, updatedAt: FieldValue.serverTimestamp(), openDisputeCount: disputes.length, openDisputeIds: disputes });
+  logger.info('account_deletion_reviewed', { actorUid: request.auth.uid, targetUid: uid, decision, status });
   await writeSecurityAudit('account_deletion_reviewed', request.auth.uid, uid, { decision, status });
   return { uid, status };
 });
@@ -264,12 +267,13 @@ exports.processAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, ti
     await db.collection('users').doc(uid).delete().catch(() => {});
     await authAdmin.deleteUser(uid);
     await ref.update({ status: 'completed', email: null, completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), openDisputeIds: [], openDisputeCount: 0 });
+    logger.info('account_deletion_completed', { actorUid: request.auth.uid, targetUid: uid, redactedRecords: touched.size });
     await writeSecurityAudit('account_deletion_completed', request.auth.uid, uid, { redactedRecords: touched.size });
     return { uid, status: 'completed', redactedRecords: touched.size };
   } catch (error) {
     await ref.update({ status: 'failed', failureCode: String(error.code || 'processing-error').slice(0, 80), updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
     await writeSecurityAudit('account_deletion_failed', request.auth.uid, uid, { errorCode: String(error.code || 'processing-error').slice(0, 80) }).catch(() => {});
-    console.error('Account deletion processing failed', { uid, code: error.code || 'unknown' });
+    logger.error('account_deletion_processing_failed', { targetUid: uid, actorUid: request.auth.uid, errorCode: String(error.code || 'unknown').slice(0, 80) });
     throw new HttpsError('internal', 'Deletion processing failed. The request is marked failed for authorized retry.');
   }
 });
