@@ -666,3 +666,112 @@ h1 {
     background: #ff7272;
     color: #260707;
 }
+
+
+/* Responsive task details popup */
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.75);
+}
+
+.modal[hidden] {
+    display: none !important;
+}
+
+.modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    margin: auto;
+    padding: 24px;
+    box-sizing: border-box;
+    border-radius: 18px;
+}
+
+.modal-content h2,
+.modal-content p,
+.application-actions label {
+    overflow-wrap: anywhere;
+}
+
+.application-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    width: 100%;
+    margin-top: 18px;
+}
+
+.application-actions[hidden] {
+    display: none !important;
+}
+
+.application-actions label {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#applicationMessageInput {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 100px;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--background);
+    color: var(--text);
+    font: inherit;
+    resize: vertical;
+}
+
+#applyTaskButton {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    margin: 0;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--background);
+    font: inherit;
+    font-weight: 700;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#applicationMessage {
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+    .modal {
+        padding: 10px;
+    }
+
+    .modal-content {
+        max-width: 100%;
+        max-height: calc(100dvh - 20px);
+        padding: 20px 16px;
+        border-radius: 16px;
+    }
+
+    .modal-content h2 {
+        padding-right: 26px;
+        font-size: 22px;
+    }
+}

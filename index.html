@@ -419,9 +419,12 @@
                 is available for this task.
             </p>
 
-            <button id="demoComplete" class="primary-button">
-                
-<div class="application-actions">
+
+<button id="demoComplete" class="primary-button" type="button">
+    Simulate completion
+</button>
+
+<div class="application-actions" hidden>
     <label for="applicationMessageInput">
         Why are you suitable for this task?
     </label>
@@ -437,15 +440,19 @@
         Apply for this task
     </button>
 
-    <p id="applicationMessage" role="status" aria-live="polite"></p>
+    <p
+        id="applicationMessage"
+        role="status"
+        aria-live="polite"
+    ></p>
 </div>
 
-                Simulate completion
-            </button>
+<p
+    id="modalMessage"
+    class="modal-message"
+    aria-live="polite"
+></p>
 
-            <p id="modalMessage"
-               class="modal-message"
-               aria-live="polite"></p>
 
         </div>
 

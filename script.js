@@ -64,7 +64,11 @@ function getTaskCards() {
     return document.querySelectorAll(".task-card");
 }
 
+
 function openTask(button) {
+    // This is a sample task, not a Firestore task.
+    currentFirebaseTask = null;
+
     currentTask = {
         id: button.dataset.taskId || button.dataset.task,
         title: button.dataset.task,
@@ -74,6 +78,37 @@ function openTask(button) {
             "Review the task instructions.",
         reward: Number(button.dataset.reward)
     };
+
+    modalTitle.textContent = currentTask.title;
+    modalDescription.textContent = currentTask.description;
+
+    modalReward.textContent =
+        "Example reward: " + formatRupees(currentTask.reward);
+
+    modalMessage.textContent = "";
+
+    const applicationActions =
+        document.querySelector(".application-actions");
+
+    applicationActions.hidden = true;
+
+    document.getElementById("applicationMessage").textContent = "";
+    document.getElementById("applicationMessageInput").value = "";
+
+    const completeButton =
+        document.getElementById("demoComplete");
+
+    completeButton.disabled =
+        completedTaskIds.has(currentTask.id);
+
+    completeButton.textContent =
+        completedTaskIds.has(currentTask.id)
+            ? "Already simulated"
+            : "Simulate completion";
+
+    taskModal.hidden = false;
+}
+
 
     modalTitle.textContent = currentTask.title;
     modalDescription.textContent = currentTask.description;
@@ -804,8 +839,12 @@ onAuthStateChanged(auth, user => {
             stopTaskListener = null;
         }
 
-        firebaseTasks = [];
-        renderFirebaseTasks();
+        firebaseTasks = snapshot.docs.map(document => ({
+            ...document.data(),
+            id: document.id
+     }));
+
+     renderFirebaseTasks();
     }
 });
 
