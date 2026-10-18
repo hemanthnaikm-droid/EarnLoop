@@ -1,11 +1,14 @@
 {
-  "name": "earnloop-account-privacy-functions",
+  "name": "earnloop-firestore-security-tests",
   "private": true,
-  "engines": { "node": "20" },
-  "main": "index.js",
-  "scripts": { "lint:syntax": "node --check index.js" },
-  "dependencies": {
-    "firebase-admin": "^13.0.0",
-    "firebase-functions": "^6.0.0"
+  "version": "1.0.0",
+  "description": "Emulator tests for EarnLoop Firestore security rules",
+  "scripts": {
+    "test:rules": "mocha --timeout 10000 test/firestore.rules.test.cjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0",
+    "mocha": "^10.8.2"
   }
 }
