@@ -1251,6 +1251,20 @@ const adminSection = document.getElementById("adminSection");
 const adminNavButton = document.querySelector('[data-page="admin"]');
 const adminMessage = document.getElementById("adminMessage");
 const adminReportsList = document.getElementById("adminReportsList");
+// Task moderation list is created in JS so the existing HTML file need not change.
+let adminTaskModerationList = document.getElementById("adminTaskModerationList");
+if (!adminTaskModerationList) {
+  const moderationPanel = document.createElement("section");
+  moderationPanel.className = "admin-task-moderation";
+  moderationPanel.innerHTML = '<h3>Task moderation</h3><p class="muted">Hide open tasks or reopen hidden tasks.</p><div id="adminTaskModerationList"></div>';
+  adminTaskModerationList = moderationPanel.querySelector("#adminTaskModerationList");
+  const reportsHeading = adminReportsList.closest("section") || adminReportsList.parentElement;
+  if (reportsHeading && reportsHeading.parentElement === adminSection) {
+    adminSection.insertBefore(moderationPanel, reportsHeading);
+  } else {
+    adminSection.appendChild(moderationPanel);
+  }
+}
 const adminStats = {
   tasks: document.getElementById("adminOpenTasks"),
   applications: document.getElementById("adminApplications"),
@@ -1281,18 +1295,20 @@ async function loadAdminDashboard() {
   adminReportsList.replaceChildren();
   try {
     const [tasksSnap, applicationsSnap, submissionsSnap, reportsSnap] = await Promise.all([
-      getDocs(query(collection(db, "tasks"), where("status", "==", "open"))),
+      getDocs(collection(db, "tasks")),
       getDocs(collection(db, "applications")),
       getDocs(collection(db, "submissions")),
       getDocs(query(collection(db, "reports"), where("status", "==", "open")))
     ]);
-    adminStats.tasks.textContent = String(tasksSnap.size);
+    const allTasks = tasksSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    adminStats.tasks.textContent = String(allTasks.filter(task => task.status === "open").length);
+    renderAdminTaskModeration(allTasks);
     adminStats.applications.textContent = String(applicationsSnap.size);
     adminStats.submissions.textContent = String(submissionsSnap.size);
     adminStats.reports.textContent = String(reportsSnap.size);
 
     if (reportsSnap.empty) {
-      adminMessage.textContent = "No open task reports. Dashboard statistics are up to date.";
+      adminMessage.textContent = "Task moderation list refreshed. No open task reports.";
       return;
     }
     const reports = reportsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1346,6 +1362,66 @@ async function loadAdminDashboard() {
     console.error("Admin dashboard load failed:", error);
     adminMessage.textContent = "Unable to load admin data. Verify admin custom claim and Phase 5 Firestore rules.";
   }
+}
+
+function renderAdminTaskModeration(tasks) {
+  if (!adminTaskModerationList) return;
+  adminTaskModerationList.replaceChildren();
+  tasks.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+
+  if (!tasks.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "No tasks have been created yet.";
+    adminTaskModerationList.appendChild(empty);
+    return;
+  }
+
+  tasks.forEach(task => {
+    const card = document.createElement("article");
+    card.className = "admin-report-card";
+    const heading = document.createElement("h4");
+    heading.textContent = task.title || "Untitled task";
+    const details = document.createElement("p");
+    details.textContent = `Task ID: ${task.id} · Status: ${task.status || "unknown"} · Created ${formatAuditTime(task.createdAt)}`;
+    const actions = document.createElement("div");
+    actions.className = "admin-actions";
+    const status = task.status;
+
+    if (status === "open" || status === "hidden") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = status === "open" ? "task-button danger-button" : "task-button";
+      button.textContent = status === "open" ? "Hide task" : "Reopen task";
+      button.addEventListener("click", async () => {
+        const nextStatus = status === "open" ? "hidden" : "open";
+        const verb = nextStatus === "hidden" ? "hide" : "reopen";
+        if (!confirm(`Are you sure you want to ${verb} “${task.title || "this task"}”?`)) return;
+        button.disabled = true;
+        try {
+          await updateDoc(doc(db, "tasks", task.id), {
+            status: nextStatus,
+            moderatedAt: serverTimestamp(),
+            moderatedBy: auth.currentUser.uid
+          });
+          adminMessage.textContent = nextStatus === "open"
+            ? "Task reopened and returned to the public marketplace."
+            : "Task hidden from the public marketplace.";
+          await loadAdminDashboard();
+        } catch (error) {
+          console.error(`Could not ${verb} task:`, error);
+          adminMessage.textContent = `Could not ${verb} task. Confirm the latest Firestore rules are published and this account has the admin custom claim.`;
+          button.disabled = false;
+        }
+      });
+      actions.appendChild(button);
+    } else {
+      const note = document.createElement("span");
+      note.textContent = "No moderation action for this status";
+      actions.appendChild(note);
+    }
+    card.append(heading, details, actions);
+    adminTaskModerationList.appendChild(card);
+  });
 }
 
 async function updateReportStatus(report, status, button, refresh = true) {
