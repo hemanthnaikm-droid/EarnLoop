@@ -28,6 +28,15 @@
 >
     👤
         </button>
+        <div id="accountMenu" class="account-menu" hidden role="menu" aria-label="Account menu">
+            <div class="account-menu-heading">Account &amp; security</div>
+            <button type="button" class="account-menu-item" data-account-action="settings" role="menuitem">Account settings</button>
+            <button type="button" class="account-menu-item" data-account-action="recovery" role="menuitem">Login &amp; recovery</button>
+            <button type="button" class="account-menu-item" data-account-action="privacy" role="menuitem">Privacy &amp; security</button>
+            <button type="button" class="account-menu-item danger" data-account-action="delete" role="menuitem">Request account deletion</button>
+            <button type="button" class="account-menu-item" data-account-action="signout" role="menuitem">Sign out</button>
+            <p id="accountMenuMessage" class="account-menu-message" aria-live="polite"></p>
+        </div>
     </header>
 
     <main>
