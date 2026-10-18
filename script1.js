@@ -83,7 +83,8 @@ function openTask(button) {
     modalDescription.textContent = currentTask.description;
 
     modalReward.textContent =
-        "Example reward: " + formatRupees(currentTask.reward);
+        "Proposed example reward: " + formatRupees(currentTask.reward) +
+        " · NOT FUNDED";
 
     modalMessage.textContent = "";
 
@@ -344,7 +345,14 @@ function renderFirebaseTasks() {
         reward.className = "reward";
         reward.textContent = "₹" + task.proposedReward;
 
-        rewardBox.append(label, reward);
+        const fundingStatus = document.createElement("span");
+        fundingStatus.className = "funding-status";
+        // Phase 1 has no trusted payment verification backend, so all
+        // rewards remain labelled unfunded regardless of client-side data.
+        fundingStatus.textContent = "NOT FUNDED · No payment guaranteed";
+        fundingStatus.dataset.funded = "false";
+
+        rewardBox.append(label, reward, fundingStatus);
 
         const button = document.createElement("button");
         button.className = "task-button";
@@ -388,11 +396,11 @@ function openFirebaseTask(task) {
         "\n\nPosted by: " + task.ownerEmail;
 
     modalReward.textContent =
-        "Proposed reward: ₹" + task.proposedReward;
+        "Proposed reward: ₹" + task.proposedReward + " · NOT FUNDED";
 
     modalMessage.textContent =
-        "This is an unfunded task proposal. " +
-        "No cash payment is currently guaranteed.";
+        "This task is not funded. The proposed reward is not guaranteed, " +
+        "and no cash payment is currently promised.";
 
     const completeButton =
         document.getElementById("demoComplete");

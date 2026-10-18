@@ -775,3 +775,35 @@ h1 {
         font-size: 22px;
     }
 }
+
+
+/* Clear reward funding disclosure */
+.funding-notice {
+    margin-top: 16px;
+    padding: 13px 14px;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 12px;
+    background: rgba(245, 158, 11, 0.08);
+    color: var(--text, #f3f4f6);
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.funding-notice strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #fbbf24;
+}
+
+.funding-status {
+    display: inline-block;
+    margin-top: 3px;
+    color: #fbbf24;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.funding-status[data-funded="true"] {
+    color: #86efac;
+}
