@@ -7,6 +7,11 @@ initializeApp();
 const db = getFirestore();
 const authAdmin = getAuth();
 
+// Set ENFORCE_APP_CHECK=true only after the web app's App Check site key is
+// configured and verified in Firebase Console. Default remains false so an
+// unconfigured deployment does not accidentally lock out every user.
+const ENFORCE_APP_CHECK = process.env.ENFORCE_APP_CHECK === 'true';
+
 // Per-user, server-enforced rate limits for callable endpoints. Uses a transaction so
 // simultaneous requests cannot all pass the same counter check.
 async function consumeRateLimit(uid, action, limit, windowSeconds) {
@@ -79,7 +84,7 @@ function boundedString(value, min, max, label) {
   return result;
 }
 
-exports.createTask = onCall({ enforceAppCheck: false }, async (request) => {
+exports.createTask = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireSignedIn(request);
   const uid = request.auth.uid;
   await consumeRateLimit(uid, 'create-task', 5, 3600);
@@ -95,7 +100,7 @@ exports.createTask = onCall({ enforceAppCheck: false }, async (request) => {
   return { taskId: ref.id, status: 'open', funded: false };
 });
 
-exports.createApplication = onCall({ enforceAppCheck: false }, async (request) => {
+exports.createApplication = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireSignedIn(request);
   const uid = request.auth.uid;
   await consumeRateLimit(uid, 'create-application', 10, 3600);
@@ -119,7 +124,7 @@ exports.createApplication = onCall({ enforceAppCheck: false }, async (request) =
   return { applicationId, status: 'pending' };
 });
 
-exports.createSubmission = onCall({ enforceAppCheck: false }, async (request) => {
+exports.createSubmission = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireSignedIn(request);
   const uid = request.auth.uid;
   await consumeRateLimit(uid, 'create-submission', 10, 3600);
@@ -141,7 +146,7 @@ exports.createSubmission = onCall({ enforceAppCheck: false }, async (request) =>
   return { submissionId: applicationId, status: 'submitted' };
 });
 
-exports.createReport = onCall({ enforceAppCheck: false }, async (request) => {
+exports.createReport = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireSignedIn(request);
   const uid = request.auth.uid;
   await consumeRateLimit(uid, 'create-report', 5, 3600);
@@ -157,7 +162,7 @@ exports.createReport = onCall({ enforceAppCheck: false }, async (request) => {
 });
 
 // Authenticated users can submit an idempotent deletion request. No client can write the request directly.
-exports.requestAccountDeletion = onCall({ enforceAppCheck: false }, async (request) => {
+exports.requestAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireRecentSignIn(request);
   const uid = request.auth.uid;
   await consumeRateLimit(uid, 'deletion-request', 3, 86400);
@@ -181,7 +186,7 @@ exports.requestAccountDeletion = onCall({ enforceAppCheck: false }, async (reque
 });
 
 // Admins explicitly approve or hold a request. Admin custom claim must be assigned securely by project owner.
-exports.reviewAccountDeletion = onCall({ enforceAppCheck: false }, async (request) => {
+exports.reviewAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireAdmin(request);
   await consumeRateLimit(request.auth.uid, 'deletion-review', 60, 60);
   const { uid, decision, note } = request.data || {};
@@ -208,7 +213,7 @@ exports.reviewAccountDeletion = onCall({ enforceAppCheck: false }, async (reques
 
 // Runs only after explicit admin approval. Keeps task/application/submission history, redacts account emails,
 // removes the profile document, and deletes the Firebase Auth account. Open disputes are checked again.
-exports.processAccountDeletion = onCall({ enforceAppCheck: false, timeoutSeconds: 120 }, async (request) => {
+exports.processAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 120 }, async (request) => {
   requireAdmin(request);
   await consumeRateLimit(request.auth.uid, 'deletion-process', 10, 3600);
   const { uid } = request.data || {};
