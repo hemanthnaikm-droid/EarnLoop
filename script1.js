@@ -288,6 +288,7 @@ let firebaseTasks = [];
 let stopTaskListener = null;
 let currentFirebaseTask = null;
 let stopApplicationsListener = null;
+let stopApplicantApplicationsListener = null;
 const taskIcons = {
     digital: "🌐",
     skills: "✍️",
@@ -664,6 +665,115 @@ function startApplicationsListener(user) {
 }
 
 
+
+/* APPLICANT STATUS UPDATES + IN-APP POPUP */
+function startApplicantApplicationsListener(user) {
+    if (stopApplicantApplicationsListener) {
+        stopApplicantApplicationsListener();
+        stopApplicantApplicationsListener = null;
+    }
+
+    const list = document.getElementById("myApplicationsList");
+    const message = document.getElementById("myApplicationsMessage");
+    const toast = document.getElementById("notificationToast");
+    if (!list || !message || !toast) return;
+
+    list.replaceChildren();
+    if (!user) {
+        message.textContent = "Log in to see updates about your applications.";
+        return;
+    }
+
+    message.textContent = "Loading your application updates...";
+    const previousStatuses = new Map();
+    let firstSnapshot = true;
+    let toastTimer = null;
+
+    const applicantQuery = query(
+        collection(db, "applications"),
+        where("applicantId", "==", user.uid)
+    );
+
+    stopApplicantApplicationsListener = onSnapshot(
+        applicantQuery,
+        snapshot => {
+            list.replaceChildren();
+
+            if (snapshot.empty) {
+                message.textContent = "You have not applied to any tasks yet.";
+                firstSnapshot = false;
+                return;
+            }
+
+            message.textContent = "Your applications: " + snapshot.size;
+
+            const applicantDocs = [...snapshot.docs].sort((a, b) => {
+                const timeA = a.data().createdAt?.toMillis?.() || 0;
+                const timeB = b.data().createdAt?.toMillis?.() || 0;
+                return timeB - timeA;
+            });
+
+            applicantDocs.forEach(item => {
+                const application = { ...item.data(), id: item.id };
+                const oldStatus = previousStatuses.get(item.id);
+                const status = application.status;
+
+                if (!firstSnapshot && oldStatus === "pending" &&
+                    (status === "accepted" || status === "rejected")) {
+                    const decisionText = status === "accepted"
+                        ? "Your application was accepted!"
+                        : "Your application was rejected.";
+
+                    toast.textContent = decisionText + " Task: " +
+                        (application.taskTitle || "Untitled task");
+                    toast.hidden = false;
+
+                    if (toastTimer) clearTimeout(toastTimer);
+                    toastTimer = setTimeout(() => {
+                        toast.hidden = true;
+                    }, 7000);
+                }
+
+                previousStatuses.set(item.id, status);
+
+                const card = document.createElement("article");
+                card.className = "application-notification-card";
+
+                const title = document.createElement("h3");
+                title.textContent = application.taskTitle || "Task application";
+
+                const statusLine = document.createElement("p");
+                statusLine.className =
+                    status === "accepted" ? "decision-accepted" :
+                    status === "rejected" ? "decision-rejected" : "";
+                statusLine.textContent =
+                    status === "accepted" ? "Decision: Accepted" :
+                    status === "rejected" ? "Decision: Rejected" :
+                    "Decision: Pending review";
+
+                const detail = document.createElement("p");
+                detail.textContent =
+                    status === "accepted"
+                        ? "The task owner accepted your application. This is not a payment confirmation."
+                        : status === "rejected"
+                            ? "The task owner did not accept your application."
+                            : "The task owner has not made a decision yet.";
+
+                card.append(title, statusLine, detail);
+                list.appendChild(card);
+            });
+
+            firstSnapshot = false;
+        },
+        error => {
+            console.error("Applicant application updates failed:", error);
+            message.textContent =
+                "Could not load your application updates: " + error.message;
+        }
+    );
+}
+
+
 function startTaskListener() {
     if (stopTaskListener) {
         stopTaskListener();
@@ -809,6 +919,7 @@ createTaskForm.addEventListener("submit", async event => {
 
 onAuthStateChanged(auth, user => {
     startApplicationsListener(user);
+    startApplicantApplicationsListener(user);
 
 
     if (user) {
