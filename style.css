@@ -925,3 +925,40 @@ h1 {
   .application-meta-grid { grid-template-columns: minmax(0, 1fr); }
   .application-card-enhanced { border-radius: 15px; }
 }
+
+/* Phase 9.1 — responsive mobile layout fixes */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { overflow-x: hidden; }
+main { width: 100%; min-width: 0; }
+#applicationsSection { width: 100%; min-width: 0; margin: 0 auto; padding: clamp(14px, 3vw, 22px); border: 1px solid var(--border); border-radius: 18px; background: rgba(25, 30, 43, .55); }
+#applicationsSection > h2 { font-size: clamp(1.25rem, 5.2vw, 2rem); line-height: 1.2; letter-spacing: -.035em; margin: 0 0 .55rem; overflow-wrap: anywhere; }
+#applicationsSection > h2.my-updates-heading { margin-top: clamp(1.5rem, 6vw, 2.25rem); padding-top: clamp(1rem, 3vw, 1.4rem); border-top: 1px solid var(--border); }
+#applicationsSection > p { font-size: clamp(.9rem, 3.8vw, 1.05rem); line-height: 1.55; overflow-wrap: anywhere; }
+#applicationsSection .applications-intro { color: var(--muted); margin-bottom: .75rem; }
+#applicationsMessage, #submissionsMessage, #mySubmissionsMessage, #myApplicationsMessage { margin: .35rem 0 1rem; }
+#applicationsList, #submissionsList, #mySubmissionsList, #myApplicationsList { display: grid; gap: 12px; min-width: 0; }
+.application-card-enhanced { width: 100%; max-width: 100%; }
+.application-card-header, .application-task-details, .application-applicant-panel, .application-message-panel { min-width: 0; }
+.account-menu { max-height: min(78dvh, 620px); overflow-y: auto; overscroll-behavior: contain; }
+.account-menu-message { display: block; margin: 8px 2px 2px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--background); font-size: .875rem; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
+.account-menu-message:empty { display: none; }
+.profile-button { flex: 0 0 40px; }
+
+@media (max-width: 520px) {
+  main { padding: 18px 12px 28px; }
+  .topbar { padding: 12px 14px; gap: 12px; }
+  .brand { font-size: 19px; min-width: 0; }
+  #applicationsSection { padding: 14px 12px; border-radius: 14px; }
+  .application-card-enhanced { padding: 14px; gap: 12px; border-radius: 14px; }
+  .application-task-details, .application-applicant-panel, .application-message-panel { padding: 12px; }
+  .application-review-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .application-review-actions button { min-width: 0; overflow-wrap: anywhere; }
+  .account-menu { right: 0; width: min(340px, calc(100vw - 20px)); }
+}
+@media (max-width: 360px) {
+  main { padding-left: 9px; padding-right: 9px; }
+  #applicationsSection { padding: 12px 9px; }
+  .application-meta-grid { grid-template-columns: minmax(0, 1fr); }
+  .application-review-actions { grid-template-columns: minmax(0, 1fr); }
+  .brand { font-size: 17px; }
+}
