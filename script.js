@@ -27,6 +27,35 @@ import {
 
 import { auth, db, authReady } from "./firebase.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
+import {
+    initializeAppCheck,
+    ReCaptchaV3Provider
+} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app-check.js";
+
+// Stage 8 App Check setup. Replace this placeholder with the reCAPTCHA v3
+// SITE KEY from Firebase Console > App Check. Never use a secret key here.
+const APP_CHECK_SITE_KEY = "REPLACE_WITH_RECAPTCHA_V3_SITE_KEY";
+let appCheck = null;
+if (APP_CHECK_SITE_KEY && !APP_CHECK_SITE_KEY.startsWith("REPLACE_WITH_")) {
+    try {
+        appCheck = initializeAppCheck(auth.app, {
+            provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+            isTokenAutoRefreshEnabled: true
+        });
+    } catch (error) {
+        // Avoid breaking the app during setup; fix the configuration before
+        // enabling server-side App Check enforcement.
+        console.error("Firebase App Check initialization failed:", error);
+    }
+} else {
+    console.warn("Firebase App Check is not configured. Add the reCAPTCHA v3 site key before enforcing App Check.");
+}
+
+const functions = getFunctions(auth.app);
+const callCreateTask = httpsCallable(functions, "createTask");
+const callCreateApplication = httpsCallable(functions, "createApplication");
+const callCreateSubmission = httpsCallable(functions, "createSubmission");
+const callCreateReport = httpsCallable(functions, "createReport");
 
 // Trust & Safety helpers: render Firestore timestamps safely.
 function formatAuditTime(value) {
@@ -403,15 +432,7 @@ function renderFirebaseTasks() {
             }
             reportButton.disabled = true;
             try {
-                await addDoc(collection(db, "reports"), {
-                    taskId: task.id,
-                    taskTitle: task.title,
-                    reporterId: user.uid,
-                    reporterEmail: user.email || "",
-                    reason: cleanReason,
-                    status: "open",
-                    createdAt: serverTimestamp()
-                });
+                await callCreateReport({ taskId: task.id, reason: cleanReason });
                 alert("Report submitted for review. This does not automatically remove the task.");
             } catch (error) {
                 console.error("Task report failed:", error);
@@ -575,16 +596,7 @@ document.getElementById("applyTaskButton")
                 return;
             }
 
-            await setDoc(applicationRef, {
-                taskId: task.id,
-                taskTitle: task.title,
-                ownerId: task.ownerId,
-                applicantId: user.uid,
-                applicantEmail: user.email,
-                message: message,
-                status: "pending",
-                createdAt: serverTimestamp()
-            });
+            await callCreateApplication({ taskId: task.id, message });
 
             messageElement.textContent =
                 "Application submitted! The task owner can review it.";
@@ -991,17 +1003,7 @@ function startApplicantApplicationsListener(user) {
                                 submitWorkButton.disabled = false;
                                 return;
                             }
-                            await setDoc(submissionRef, {
-                                taskId: application.taskId,
-                                applicationId: application.id,
-                                taskTitle: application.taskTitle,
-                                ownerId: application.ownerId,
-                                applicantId: currentUser.uid,
-                                applicantEmail: currentUser.email,
-                                evidence: evidenceText,
-                                status: "submitted",
-                                createdAt: serverTimestamp()
-                            });
+                            await callCreateSubmission({ applicationId: application.id, evidence: evidenceText });
                             workForm.hidden = true;
                             workMessage.textContent = "Work submitted for review. This is not a payment confirmation.";
                             const submittedStatus = document.createElement("p");
@@ -1259,17 +1261,7 @@ createTaskForm.addEventListener("submit", async event => {
             throw new Error("Please log in again.");
         }
 
-        await addDoc(collection(db, "tasks"), {
-            title,
-            description,
-            category,
-            proposedReward,
-            ownerId: user.uid,
-            ownerEmail: user.email,
-            createdAt: serverTimestamp(),
-            status: "open",
-            funded: false
-        });
+        await callCreateTask({ title, description, category, proposedReward });
 
         createTaskForm.reset();
 
@@ -1655,6 +1647,37 @@ accountMenu.querySelectorAll("[data-account-action]").forEach(button => {
             accountMenuMessage.textContent = "Use a unique password, keep your email secure, and never share verification codes. Deletion requests are reviewed before any account/data removal.";
             return;
         }
+        if (action === "deletion-status") {
+            try {
+                accountMenuMessage.textContent = "Checking your deletion request status...";
+                const getStatus = httpsCallable(functions, "getAccountDeletionStatus");
+                const result = await getStatus({});
+                const data = result.data || {};
+                if (!data.exists || data.status === "not_requested") {
+                    accountMenuMessage.textContent = "Status: No deletion request found for this account.";
+                    return;
+                }
+                const labels = {
+                    requested: "REQUESTED — waiting for authorized review.",
+                    needs_review: "NEEDS REVIEW — the request is on hold. Open disputes must be resolved or an administrator must review it.",
+                    approved: "APPROVED — waiting for secure processing.",
+                    processing: "PROCESSING — deletion is in progress.",
+                    completed: "COMPLETED — the deletion processor reported completion.",
+                    failed: "FAILED — an administrator must inspect the failure and retry safely if appropriate.",
+                    rejected: "REJECTED — the deletion request was not approved."
+                };
+                const label = labels[data.status] || `STATUS: ${String(data.status || "unknown").toUpperCase()}.`;
+                const updated = data.updatedAt ? ` Last updated: ${new Date(data.updatedAt).toLocaleString()}.` : "";
+                const disputes = data.openDisputeCount ? ` Open disputes: ${data.openDisputeCount}.` : "";
+                accountMenuMessage.textContent = `Deletion request: ${label}${disputes}${updated}`;
+            } catch (error) {
+                console.error("Could not load deletion request status:", error);
+                accountMenuMessage.textContent = error.code === "functions/not-found" || error.code === "functions/unavailable"
+                    ? "Status service is not deployed yet. Your existing request has not been changed."
+                    : "Could not load request status. Check Cloud Functions deployment and try again.";
+            }
+            return;
+        }
         if (action === "recovery") {
             if (!user.email) { accountMenuMessage.textContent = "This account has no email address for password recovery. Sign in again using your original provider."; return; }
             try {
@@ -1685,9 +1708,16 @@ accountMenu.querySelectorAll("[data-account-action]").forEach(button => {
                 accountMenuMessage.textContent = "Submitting your request securely...";
                 const result = await requestDeletion({});
                 const status = result.data?.status || "requested";
-                accountMenuMessage.textContent = status === "needs_review"
-                    ? "Request recorded and placed on hold because an open dispute needs review. Your account remains active."
-                    : "Deletion request recorded for authorized review. Your account remains active until review and processing are completed.";
+                const statusLabels = {
+                    requested: "REQUESTED — waiting for authorized review.",
+                    needs_review: "NEEDS REVIEW — placed on hold because an open dispute needs review.",
+                    approved: "APPROVED — waiting for secure processing.",
+                    processing: "PROCESSING — deletion is in progress.",
+                    completed: "COMPLETED — the processor reported completion.",
+                    failed: "FAILED — an administrator must review and retry safely if appropriate.",
+                    rejected: "REJECTED — the request was not approved."
+                };
+                accountMenuMessage.textContent = `Deletion request status: ${statusLabels[status] || String(status).toUpperCase()}. Your account remains active unless the authorized deletion workflow completes.`;
             } catch (error) {
                 console.error("Account deletion request failed:", error);
                 accountMenuMessage.textContent = error.code === "functions/not-found" || error.code === "functions/unavailable"

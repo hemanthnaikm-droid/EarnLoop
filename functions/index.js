@@ -162,6 +162,25 @@ exports.createReport = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (req
   return { reportId: ref.id, status: 'open' };
 });
 
+// Return only the signed-in user's own deletion request status. Never expose another user's request.
+exports.getAccountDeletionStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in first.');
+  const uid = request.auth.uid;
+  await consumeRateLimit(uid, 'deletion-status', 30, 3600);
+  const snap = await db.collection('accountDeletionRequests').doc(uid).get();
+  if (!snap.exists) return { exists: false, status: 'not_requested' };
+  const data = snap.data();
+  return {
+    exists: true,
+    status: String(data.status || 'unknown'),
+    holdReason: data.holdReason || null,
+    openDisputeCount: Number(data.openDisputeCount || 0),
+    requestedAt: data.requestedAt && typeof data.requestedAt.toDate === 'function' ? data.requestedAt.toDate().toISOString() : null,
+    updatedAt: data.updatedAt && typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate().toISOString() : null,
+    completedAt: data.completedAt && typeof data.completedAt.toDate === 'function' ? data.completedAt.toDate().toISOString() : null
+  };
+});
+
 // Authenticated users can submit an idempotent deletion request. No client can write the request directly.
 exports.requestAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   requireRecentSignIn(request);
