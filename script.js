@@ -12,6 +12,7 @@ import {
     setDoc,
     addDoc,
     getDoc,
+    getDocs,
     serverTimestamp,
     onSnapshot,
     query,
@@ -265,6 +266,7 @@ document.querySelectorAll(".nav-item").forEach(button => {
         if (page === "create") showCreate();
         if (page === "wallet") showWallet();
         if (page === "applications") showApplications();
+        if (page === "admin") showAdmin();
     });
 });
 
@@ -374,7 +376,44 @@ function renderFirebaseTasks() {
 
         footer.append(rewardBox, button);
 
-        card.append(top, title, description, owner, footer);
+        const reportButton = document.createElement("button");
+        reportButton.type = "button";
+        reportButton.className = "report-task-button";
+        reportButton.textContent = "Report task";
+        reportButton.addEventListener("click", async () => {
+            const user = auth.currentUser;
+            if (!user) {
+                alert("Please log in before reporting a task.");
+                return;
+            }
+            const reason = prompt("Why are you reporting this task? (10–500 characters)");
+            if (reason === null) return;
+            const cleanReason = reason.trim();
+            if (cleanReason.length < 10 || cleanReason.length > 500) {
+                alert("Please enter a reason between 10 and 500 characters.");
+                return;
+            }
+            reportButton.disabled = true;
+            try {
+                await addDoc(collection(db, "reports"), {
+                    taskId: task.id,
+                    taskTitle: task.title,
+                    reporterId: user.uid,
+                    reporterEmail: user.email || "",
+                    reason: cleanReason,
+                    status: "open",
+                    createdAt: serverTimestamp()
+                });
+                alert("Report submitted for review. This does not automatically remove the task.");
+            } catch (error) {
+                console.error("Task report failed:", error);
+                alert("Could not submit the report. Check Firestore rules and try again.");
+            } finally {
+                reportButton.disabled = false;
+            }
+        });
+
+        card.append(top, title, description, owner, footer, reportButton);
 
         taskList.appendChild(card);
     });
@@ -1180,6 +1219,146 @@ onAuthStateChanged(auth, user => {
 
 
 
+
+// ===================================
+// PHASE 5: ADMIN & PLATFORM MANAGEMENT
+// ===================================
+const adminSection = document.getElementById("adminSection");
+const adminNavButton = document.querySelector('[data-page="admin"]');
+const adminMessage = document.getElementById("adminMessage");
+const adminReportsList = document.getElementById("adminReportsList");
+const adminStats = {
+  tasks: document.getElementById("adminOpenTasks"),
+  applications: document.getElementById("adminApplications"),
+  submissions: document.getElementById("adminSubmissions"),
+  reports: document.getElementById("adminOpenReports")
+};
+let currentUserIsAdmin = false;
+
+function showAdmin() {
+  if (!currentUserIsAdmin) {
+    alert("Admin access is restricted.");
+    return;
+  }
+  document.querySelector(".welcome").hidden = true;
+  document.querySelector(".wallet-card").hidden = true;
+  document.querySelector(".how-it-works").hidden = true;
+  document.querySelectorAll(".section").forEach(section => { section.hidden = true; });
+  createSection.hidden = true;
+  applicationsSection.hidden = true;
+  adminSection.hidden = false;
+  adminSection.scrollIntoView({ behavior: "smooth" });
+  loadAdminDashboard();
+}
+
+async function loadAdminDashboard() {
+  if (!auth.currentUser || !currentUserIsAdmin) return;
+  adminMessage.textContent = "Loading platform data…";
+  adminReportsList.replaceChildren();
+  try {
+    const [tasksSnap, applicationsSnap, submissionsSnap, reportsSnap] = await Promise.all([
+      getDocs(query(collection(db, "tasks"), where("status", "==", "open"))),
+      getDocs(collection(db, "applications")),
+      getDocs(collection(db, "submissions")),
+      getDocs(query(collection(db, "reports"), where("status", "==", "open")))
+    ]);
+    adminStats.tasks.textContent = String(tasksSnap.size);
+    adminStats.applications.textContent = String(applicationsSnap.size);
+    adminStats.submissions.textContent = String(submissionsSnap.size);
+    adminStats.reports.textContent = String(reportsSnap.size);
+
+    if (reportsSnap.empty) {
+      adminMessage.textContent = "No open task reports. Dashboard statistics are up to date.";
+      return;
+    }
+    const reports = reportsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    reports.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    reports.forEach(report => {
+      const card = document.createElement("article");
+      card.className = "admin-report-card";
+      const heading = document.createElement("h4");
+      heading.textContent = report.taskTitle || "Reported task";
+      const details = document.createElement("p");
+      details.textContent = `Task ID: ${report.taskId || "unknown"} · Reported ${formatAuditTime(report.createdAt)}`;
+      const reporter = document.createElement("p");
+      reporter.textContent = `Reporter: ${report.reporterEmail || report.reporterId || "unknown"}`;
+      const reason = document.createElement("p");
+      reason.textContent = `Reason: ${report.reason || "No reason supplied"}`;
+      const actions = document.createElement("div");
+      actions.className = "admin-actions";
+      const reviewButton = document.createElement("button");
+      reviewButton.type = "button";
+      reviewButton.className = "task-button";
+      reviewButton.textContent = "Mark reviewed";
+      reviewButton.addEventListener("click", () => updateReportStatus(report, "reviewed", reviewButton));
+      const hideButton = document.createElement("button");
+      hideButton.type = "button";
+      hideButton.className = "task-button danger-button";
+      hideButton.textContent = "Hide reported task";
+      hideButton.addEventListener("click", async () => {
+        if (!confirm("Hide this task from the open-task feed? This is a moderation action, not a finding that the report is proven.")) return;
+        hideButton.disabled = true;
+        try {
+          await updateDoc(doc(db, "tasks", report.taskId), {
+            status: "hidden",
+            moderatedAt: serverTimestamp(),
+            moderatedBy: auth.currentUser.uid
+          });
+          await updateReportStatus(report, "reviewed", reviewButton, false);
+          adminMessage.textContent = "Task hidden from the open-task feed and report marked reviewed.";
+          await loadAdminDashboard();
+        } catch (error) {
+          console.error("Task moderation failed:", error);
+          adminMessage.textContent = "Moderation failed. Check custom claims and Firestore rules.";
+          hideButton.disabled = false;
+        }
+      });
+      actions.append(reviewButton, hideButton);
+      card.append(heading, details, reporter, reason, actions);
+      adminReportsList.appendChild(card);
+    });
+    adminMessage.textContent = `Loaded ${reports.length} open report(s). Review each report fairly.`;
+  } catch (error) {
+    console.error("Admin dashboard load failed:", error);
+    adminMessage.textContent = "Unable to load admin data. Verify admin custom claim and Phase 5 Firestore rules.";
+  }
+}
+
+async function updateReportStatus(report, status, button, refresh = true) {
+  if (!currentUserIsAdmin || !auth.currentUser) return;
+  if (button) button.disabled = true;
+  try {
+    await updateDoc(doc(db, "reports", report.id), {
+      status,
+      reviewedAt: serverTimestamp(),
+      reviewedBy: auth.currentUser.uid
+    });
+    adminMessage.textContent = `Report marked ${status}.`;
+    if (refresh) await loadAdminDashboard();
+  } catch (error) {
+    console.error("Report review failed:", error);
+    adminMessage.textContent = "Could not update report. Verify the Phase 5 rules are published.";
+    if (button) button.disabled = false;
+  }
+}
+
+document.getElementById("refreshAdminButton").addEventListener("click", loadAdminDashboard);
+
+async function configureAdminAccess(user) {
+  currentUserIsAdmin = false;
+  adminNavButton.hidden = true;
+  adminSection.hidden = true;
+  if (!user) return;
+  try {
+    const tokenResult = await user.getIdTokenResult(true);
+    currentUserIsAdmin = tokenResult.claims.admin === true;
+    adminNavButton.hidden = !currentUserIsAdmin;
+    if (currentUserIsAdmin) adminMessage.textContent = "Admin access verified by Firebase custom claim.";
+  } catch (error) {
+    console.error("Unable to verify admin claim:", error);
+  }
+}
+
 const authSection = document.getElementById("authSection");
 const authForm = document.getElementById("authForm");
 const authHeading = document.getElementById("authHeading");
@@ -1368,6 +1547,7 @@ authForm.addEventListener("submit", async event => {
 
 onAuthStateChanged(auth, async user => {
     authenticatedUser = user;
+    await configureAdminAccess(user);
 
     if (!user) {
         profileButton.textContent = "👤";

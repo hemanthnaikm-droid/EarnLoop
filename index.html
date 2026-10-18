@@ -431,6 +431,22 @@
     </form>
 </section>
 
+
+<section id="adminSection" class="section admin-panel" hidden>
+  <p class="eyebrow">RESTRICTED ACCESS</p>
+  <h2>Admin & Platform Management</h2>
+  <p class="admin-note">Only accounts with a trusted Firebase custom claim <code>admin: true</code> can access this dashboard. Hiding this page is not the security boundary; Firestore rules enforce access.</p>
+  <div class="admin-stats" id="adminStats">
+    <article class="admin-stat"><span>Open tasks</span><strong id="adminOpenTasks">—</strong></article>
+    <article class="admin-stat"><span>Applications</span><strong id="adminApplications">—</strong></article>
+    <article class="admin-stat"><span>Submissions</span><strong id="adminSubmissions">—</strong></article>
+    <article class="admin-stat"><span>Open reports</span><strong id="adminOpenReports">—</strong></article>
+  </div>
+  <div class="admin-toolbar"><h3>Task reports</h3><button id="refreshAdminButton" class="task-button" type="button">Refresh dashboard</button></div>
+  <p id="adminMessage" role="status" aria-live="polite">Admin dashboard has not loaded.</p>
+  <div id="adminReportsList"></div>
+</section>
+
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
@@ -459,6 +475,11 @@
         <button class="nav-item" data-page="wallet">
             <span>▤</span>
             <small>Wallet</small>
+        </button>
+
+
+        <button class="nav-item admin-nav-item" data-page="admin" type="button" hidden>
+            <span>🛡️</span><small>Admin</small>
         </button>
 
     </nav>

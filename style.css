@@ -848,3 +848,22 @@ h1 {
 .ledger-status { display: inline-block; margin-top: 9px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; color: #fbbf24; font-size: .75rem; line-height: 1.4; }
 .ledger-entry-note { margin-top: 7px; color: var(--muted); font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
 @media (max-width: 480px) { .ledger-summary { grid-template-columns: 1fr; } .ledger-entry-top { flex-direction: column; gap: 5px; } }
+
+
+/* Phase 5 — Admin & Platform Management */
+.admin-panel { padding: 22px; margin: 18px auto; max-width: 1000px; }
+.admin-note { color: var(--muted); line-height: 1.55; margin: 12px 0 20px; }
+.admin-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 26px; }
+.admin-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; display: grid; gap: 8px; }
+.admin-stat span { color: var(--muted); font-size: 13px; }
+.admin-stat strong { font-size: 26px; }
+.admin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.admin-report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 12px 0; overflow-wrap: anywhere; }
+.admin-report-card h4 { margin-bottom: 10px; }
+.admin-report-card p { color: var(--muted); margin: 8px 0; line-height: 1.5; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.report-task-button { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; margin-top: 10px; }
+.report-task-button:disabled, .task-button:disabled { opacity: .55; cursor: wait; }
+.danger-button { background: #532a32; border-color: #7e3b48; color: #fff; }
+.admin-nav-item[hidden] { display: none !important; }
+@media (min-width: 700px) { .admin-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
