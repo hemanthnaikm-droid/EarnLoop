@@ -807,3 +807,15 @@ h1 {
 .funding-status[data-funded="true"] {
     color: #86efac;
 }
+
+
+/* Phase 2: work submission and review */
+.work-submit-area { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.work-submit-area h4 { margin: 0 0 .5rem; }
+.work-submit-area p { line-height: 1.6; overflow-wrap: anywhere; }
+.work-submit-form { display: grid; gap: .75rem; margin-top: .75rem; }
+.work-submit-form textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); color: var(--text); font: inherit; resize: vertical; }
+.work-submit-form button, .application-review-actions button { min-height: 42px; padding: 10px 14px; border: 0; border-radius: 9px; font: inherit; font-weight: 700; cursor: pointer; }
+.work-submit-form button:disabled, .application-review-actions button:disabled { opacity: .55; cursor: wait; }
+.work-message, .submission-status { font-size: .9rem; line-height: 1.6; overflow-wrap: anywhere; }
+.submission-evidence { white-space: pre-wrap; overflow-wrap: anywhere; }

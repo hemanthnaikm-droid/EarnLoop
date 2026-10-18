@@ -290,6 +290,8 @@ let stopTaskListener = null;
 let currentFirebaseTask = null;
 let stopApplicationsListener = null;
 let stopApplicantApplicationsListener = null;
+let stopOwnerSubmissionsListener = null;
+let stopApplicantSubmissionsListener = null;
 const taskIcons = {
     digital: "🌐",
     skills: "✍️",
@@ -768,6 +770,96 @@ function startApplicantApplicationsListener(user) {
                             : "The task owner has not made a decision yet.";
 
                 card.append(title, statusLine, detail);
+
+                if (status === "accepted") {
+                    const workArea = document.createElement("div");
+                    workArea.className = "work-submit-area";
+                    const workHeading = document.createElement("h4");
+                    workHeading.textContent = "Submit your completed work";
+                    const workHelp = document.createElement("p");
+                    workHelp.textContent = "Add a link or describe your work (10–3000 characters). Do not include passwords, OTPs, or sensitive personal information.";
+                    const workForm = document.createElement("form");
+                    workForm.className = "work-submit-form";
+                    const evidence = document.createElement("textarea");
+                    evidence.required = true;
+                    evidence.minLength = 10;
+                    evidence.maxLength = 3000;
+                    evidence.rows = 4;
+                    evidence.placeholder = "Paste a work link or describe what you completed...";
+                    const submitWorkButton = document.createElement("button");
+                    submitWorkButton.type = "submit";
+                    submitWorkButton.className = "application-review-button accept";
+                    submitWorkButton.textContent = "Submit work";
+                    const workMessage = document.createElement("p");
+                    workMessage.className = "work-message";
+                    workMessage.setAttribute("role", "status");
+                    workForm.append(evidence, submitWorkButton, workMessage);
+                    workArea.append(workHeading, workHelp, workForm);
+                    card.appendChild(workArea);
+
+                    getDoc(doc(db, "submissions", application.id)).then(existing => {
+                        if (existing.exists()) {
+                            const data = existing.data();
+                            workForm.hidden = true;
+                            const existingStatus = document.createElement("p");
+                            existingStatus.className = "submission-status";
+                            existingStatus.textContent = "Work status: " + (data.status || "submitted") + ". This does not confirm payment.";
+                            workArea.appendChild(existingStatus);
+                            const evidenceText = document.createElement("p");
+                            evidenceText.textContent = "Submitted work: " + (data.evidence || "");
+                            workArea.appendChild(evidenceText);
+                        }
+                    }).catch(error => {
+                        console.error("Could not check submission:", error);
+                    });
+
+                    workForm.addEventListener("submit", async event => {
+                        event.preventDefault();
+                        const currentUser = auth.currentUser;
+                        const evidenceText = evidence.value.trim();
+                        if (!currentUser || currentUser.uid !== application.applicantId) {
+                            workMessage.textContent = "Please log in with the applicant account.";
+                            return;
+                        }
+                        if (evidenceText.length < 10 || evidenceText.length > 3000) {
+                            workMessage.textContent = "Work details must be 10–3000 characters.";
+                            return;
+                        }
+                        submitWorkButton.disabled = true;
+                        workMessage.textContent = "Submitting work...";
+                        try {
+                            const submissionRef = doc(db, "submissions", application.id);
+                            const existing = await getDoc(submissionRef);
+                            if (existing.exists()) {
+                                workMessage.textContent = "Work has already been submitted for this application.";
+                                submitWorkButton.disabled = false;
+                                return;
+                            }
+                            await setDoc(submissionRef, {
+                                taskId: application.taskId,
+                                applicationId: application.id,
+                                taskTitle: application.taskTitle,
+                                ownerId: application.ownerId,
+                                applicantId: currentUser.uid,
+                                applicantEmail: currentUser.email,
+                                evidence: evidenceText,
+                                status: "submitted",
+                                createdAt: serverTimestamp()
+                            });
+                            workForm.hidden = true;
+                            workMessage.textContent = "Work submitted for review. This is not a payment confirmation.";
+                            const submittedStatus = document.createElement("p");
+                            submittedStatus.className = "submission-status";
+                            submittedStatus.textContent = "Work status: submitted · Awaiting owner review.";
+                            workArea.appendChild(submittedStatus);
+                        } catch (error) {
+                            console.error("Work submission failed:", error);
+                            workMessage.textContent = "Unable to submit work: " + error.message;
+                            submitWorkButton.disabled = false;
+                        }
+                    });
+                }
+
                 list.appendChild(card);
             });
 
@@ -781,6 +873,120 @@ function startApplicantApplicationsListener(user) {
     );
 }
 
+
+/* WORK SUBMISSIONS: OWNER REVIEW AND APPLICANT STATUS */
+function startSubmissionListeners(user) {
+    if (stopOwnerSubmissionsListener) { stopOwnerSubmissionsListener(); stopOwnerSubmissionsListener = null; }
+    if (stopApplicantSubmissionsListener) { stopApplicantSubmissionsListener(); stopApplicantSubmissionsListener = null; }
+
+    const ownerList = document.getElementById("submissionsList");
+    const ownerMessage = document.getElementById("submissionsMessage");
+    if (!ownerList || !ownerMessage) return;
+    ownerList.replaceChildren();
+
+    if (!user) {
+        ownerMessage.textContent = "Log in to review submitted work for your tasks.";
+        return;
+    }
+
+    ownerMessage.textContent = "Loading submitted work...";
+    const ownerSubmissionsQuery = query(collection(db, "submissions"), where("ownerId", "==", user.uid));
+    stopOwnerSubmissionsListener = onSnapshot(ownerSubmissionsQuery, snapshot => {
+        ownerList.replaceChildren();
+        if (snapshot.empty) {
+            ownerMessage.textContent = "No work has been submitted for your tasks yet.";
+            return;
+        }
+        ownerMessage.textContent = snapshot.size + " submission(s)";
+        const submissions = snapshot.docs.map(item => ({ ...item.data(), id: item.id }));
+        submissions.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        submissions.forEach(submission => {
+            const card = document.createElement("article");
+            card.className = "application-card";
+            const title = document.createElement("h3"); title.textContent = submission.taskTitle || "Submitted work";
+            const applicant = document.createElement("p"); applicant.textContent = "Applicant: " + (submission.applicantEmail || "Unknown");
+            const evidence = document.createElement("p"); evidence.className = "submission-evidence"; evidence.textContent = "Work evidence: " + (submission.evidence || "");
+            const status = document.createElement("span"); status.className = "application-status submission-status"; status.textContent = "Work status: " + submission.status + " · Not a payment confirmation";
+            card.append(title, applicant, evidence, status);
+
+            const actions = document.createElement("div"); actions.className = "application-review-actions";
+            if (submission.status === "submitted") {
+                const approve = document.createElement("button"); approve.type = "button"; approve.className = "application-review-button accept"; approve.textContent = "Approve work";
+                const dispute = document.createElement("button"); dispute.type = "button"; dispute.className = "application-review-button reject"; dispute.textContent = "Open dispute";
+                approve.addEventListener("click", () => updateSubmissionStatus(submission, "approved", approve, dispute, ownerMessage));
+                dispute.addEventListener("click", () => updateSubmissionStatus(submission, "disputed", approve, dispute, ownerMessage));
+                actions.append(approve, dispute); card.appendChild(actions);
+            } else if (submission.status === "disputed") {
+                const resolve = document.createElement("button"); resolve.type = "button"; resolve.className = "application-review-button accept"; resolve.textContent = "Mark dispute resolved";
+                resolve.addEventListener("click", () => updateSubmissionStatus(submission, "resolved", resolve, null, ownerMessage));
+                actions.appendChild(resolve); card.appendChild(actions);
+            }
+            ownerList.appendChild(card);
+        });
+    }, error => {
+        console.error("Submission listener failed:", error);
+        ownerMessage.textContent = "Unable to load submissions: " + error.message;
+    });
+
+    const applicantList = document.getElementById("mySubmissionsList");
+    const applicantMessage = document.getElementById("mySubmissionsMessage");
+    const applicantQuery = query(collection(db, "submissions"), where("applicantId", "==", user.uid));
+    stopApplicantSubmissionsListener = onSnapshot(applicantQuery, snapshot => {
+        applicantList.replaceChildren();
+        if (snapshot.empty) {
+            applicantMessage.textContent = "You have not submitted work yet.";
+            return;
+        }
+        applicantMessage.textContent = snapshot.size + " work submission(s)";
+        snapshot.docs.forEach(item => {
+            const data = item.data();
+            const card = document.createElement("article");
+            card.className = "application-notification-card";
+            const title = document.createElement("h3"); title.textContent = data.taskTitle || "Submitted work";
+            const status = document.createElement("p"); status.className = "submission-status";
+            status.textContent = "Work status: " + data.status + " · This is not a payment confirmation.";
+            const evidence = document.createElement("p"); evidence.textContent = "Your submission: " + (data.evidence || "");
+            card.append(title, status, evidence);
+            if (["submitted", "approved"].includes(data.status)) {
+                const dispute = document.createElement("button");
+                dispute.type = "button"; dispute.className = "application-review-button reject";
+                dispute.textContent = "Open dispute";
+                dispute.addEventListener("click", async () => {
+                    dispute.disabled = true;
+                    try {
+                        await updateDoc(doc(db, "submissions", item.id), { status: "disputed", reviewedAt: serverTimestamp() });
+                    } catch (error) {
+                        console.error("Could not open dispute:", error);
+                        applicantMessage.textContent = "Unable to open dispute: " + error.message;
+                        dispute.disabled = false;
+                    }
+                });
+                card.appendChild(dispute);
+            }
+            applicantList.appendChild(card);
+        });
+    }, error => {
+        console.error("Applicant submission status listener failed:", error);
+        applicantMessage.textContent = "Unable to load your work submissions: " + error.message;
+    });
+}
+
+async function updateSubmissionStatus(submission, newStatus, primaryButton, secondaryButton, messageElement) {
+    if (!auth.currentUser || auth.currentUser.uid !== submission.ownerId) {
+        messageElement.textContent = "Only the task owner can review this submission.";
+        return;
+    }
+    primaryButton.disabled = true;
+    if (secondaryButton) secondaryButton.disabled = true;
+    try {
+        await updateDoc(doc(db, "submissions", submission.id), { status: newStatus, reviewedAt: serverTimestamp() });
+    } catch (error) {
+        console.error("Submission review failed:", error);
+        messageElement.textContent = "Unable to update work status: " + error.message;
+        primaryButton.disabled = false;
+        if (secondaryButton) secondaryButton.disabled = false;
+    }
+}
 
 function startTaskListener() {
     if (stopTaskListener) {
@@ -928,6 +1134,7 @@ createTaskForm.addEventListener("submit", async event => {
 onAuthStateChanged(auth, user => {
     startApplicationsListener(user);
     startApplicantApplicationsListener(user);
+    startSubmissionListeners(user);
 
 
     if (user) {
