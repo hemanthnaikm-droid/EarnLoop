@@ -118,14 +118,37 @@
 
             <div class="wallet-footer">
                 <div>
-                    <span class="stat-label">Completed tasks</span>
+                    <span class="stat-label">Demo completions</span>
                     <strong id="completedCount">0</strong>
                 </div>
 
                 <div>
-                    <span class="stat-label">Pending rewards</span>
+                    <span class="stat-label">Proposed work rewards</span>
                     <strong id="pendingBalance">₹0.00</strong>
                 </div>
+            </div>
+
+            <div class="reward-ledger">
+                <div class="ledger-heading">
+                    <div>
+                        <p class="eyebrow">PHASE 4</p>
+                        <h3>Reward ledger</h3>
+                    </div>
+                    <span class="demo-badge">READ-ONLY</span>
+                </div>
+                <p class="wallet-note ledger-disclaimer">
+                    This ledger is calculated from your work submissions and task proposals.
+                    It is not a bank balance or payment record. Approved work remains unpaid
+                    unless a real, funded payment is made separately.
+                </p>
+                <div class="ledger-summary">
+                    <div><span class="stat-label">Awaiting review</span><strong id="ledgerPending">₹0.00</strong></div>
+                    <div><span class="stat-label">Approved · unpaid</span><strong id="ledgerApproved">₹0.00</strong></div>
+                    <div><span class="stat-label">Disputed</span><strong id="ledgerDisputed">₹0.00</strong></div>
+                </div>
+                <h4 class="ledger-subheading">Work reward history</h4>
+                <p id="ledgerMessage" class="wallet-note" role="status" aria-live="polite">Log in to view reward history.</p>
+                <div id="rewardLedgerList" class="reward-ledger-list"></div>
             </div>
 
         </section>

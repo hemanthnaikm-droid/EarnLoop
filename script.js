@@ -22,6 +22,14 @@ import {
 
 
 import { auth, db, authReady } from "./firebase.js";
+
+// Trust & Safety helpers: render Firestore timestamps safely.
+function formatAuditTime(value) {
+    if (!value) return "Not recorded";
+    const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not recorded";
+    return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
 const taskList = document.getElementById("taskList");
 const taskModal = document.getElementById("taskModal");
 
@@ -600,8 +608,12 @@ function startApplicationsListener(user) {
                 status.className = "application-status";
                 status.textContent =
                     "Status: " + application.status;
+                const timeline = document.createElement("p");
+                timeline.className = "audit-timestamp";
+                timeline.textContent = "Applied: " + formatAuditTime(application.createdAt) +
+                    (application.reviewedAt ? " · Reviewed: " + formatAuditTime(application.reviewedAt) : " · Awaiting decision");
 
-                card.append(title, applicant, message, status);
+                card.append(title, applicant, message, status, timeline);
 
                 if (application.status === "pending") {
                     const actions = document.createElement("div");
@@ -907,7 +919,11 @@ function startSubmissionListeners(user) {
             const applicant = document.createElement("p"); applicant.textContent = "Applicant: " + (submission.applicantEmail || "Unknown");
             const evidence = document.createElement("p"); evidence.className = "submission-evidence"; evidence.textContent = "Work evidence: " + (submission.evidence || "");
             const status = document.createElement("span"); status.className = "application-status submission-status"; status.textContent = "Work status: " + submission.status + " · Not a payment confirmation";
-            card.append(title, applicant, evidence, status);
+            const timeline = document.createElement("p");
+            timeline.className = "audit-timestamp";
+            timeline.textContent = "Submitted: " + formatAuditTime(submission.createdAt) +
+                (submission.reviewedAt ? " · Last status update: " + formatAuditTime(submission.reviewedAt) : " · Awaiting review");
+            card.append(title, applicant, evidence, status, timeline);
 
             const actions = document.createElement("div"); actions.className = "application-review-actions";
             if (submission.status === "submitted") {
@@ -946,7 +962,11 @@ function startSubmissionListeners(user) {
             const status = document.createElement("p"); status.className = "submission-status";
             status.textContent = "Work status: " + data.status + " · This is not a payment confirmation.";
             const evidence = document.createElement("p"); evidence.textContent = "Your submission: " + (data.evidence || "");
-            card.append(title, status, evidence);
+            const timeline = document.createElement("p");
+            timeline.className = "audit-timestamp";
+            timeline.textContent = "Submitted: " + formatAuditTime(data.createdAt) +
+                (data.reviewedAt ? " · Last status update: " + formatAuditTime(data.reviewedAt) : " · Awaiting review");
+            card.append(title, status, evidence, timeline);
             if (["submitted", "approved"].includes(data.status)) {
                 const dispute = document.createElement("button");
                 dispute.type = "button"; dispute.className = "application-review-button reject";
@@ -1008,6 +1028,8 @@ function startTaskListener() {
             }));
 
             renderFirebaseTasks();
+            // Re-render reward amounts if task data arrives after submissions.
+            renderRewardLedger(latestRewardSubmissionDocs);
         },
         error => {
             console.error("Task loading error:", error);
