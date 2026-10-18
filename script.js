@@ -2,7 +2,10 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    sendPasswordResetEmail,
+    EmailAuthProvider,
+    reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
 
@@ -23,6 +26,7 @@ import {
 
 
 import { auth, db, authReady } from "./firebase.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-functions.js";
 
 // Trust & Safety helpers: render Firestore timestamps safely.
 function formatAuditTime(value) {
@@ -1600,26 +1604,100 @@ authSwitch.addEventListener("click", () => {
     updateAuthMode();
 });
 
-profileButton.addEventListener("click", async () => {
-    if (authenticatedUser) {
-        const shouldLogout = confirm(
-            "Log out of EarnLoop?"
-        );
+const accountMenu = document.getElementById("accountMenu");
+const accountMenuMessage = document.getElementById("accountMenuMessage");
 
-        if (!shouldLogout) return;
+profileButton.setAttribute("aria-haspopup", "menu");
+profileButton.setAttribute("aria-expanded", "false");
 
-        try {
-            await signOut(auth);
-        } catch (error) {
-            alert("Unable to log out. Please try again.");
-        }
+profileButton.addEventListener("click", () => {
+    accountMenu.hidden = !accountMenu.hidden;
+    profileButton.setAttribute("aria-expanded", String(!accountMenu.hidden));
+    accountMenuMessage.textContent = "";
+});
 
-        return;
+document.addEventListener("click", event => {
+    if (!accountMenu.hidden && !accountMenu.contains(event.target) && event.target !== profileButton) {
+        accountMenu.hidden = true;
+        profileButton.setAttribute("aria-expanded", "false");
     }
+});
 
-    authMode = "register";
-    updateAuthMode();
-    showAuthScreen();
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+        accountMenu.hidden = true;
+        profileButton.setAttribute("aria-expanded", "false");
+    }
+});
+
+accountMenu.querySelectorAll("[data-account-action]").forEach(button => {
+    button.addEventListener("click", async () => {
+        const action = button.dataset.accountAction;
+        const user = auth.currentUser;
+        if (action === "signout") {
+            if (!user) {
+                authMode = "login"; updateAuthMode(); showAuthScreen(); return;
+            }
+            if (!confirm("Sign out of EarnLoop on this device?")) return;
+            try { await signOut(auth); accountMenu.hidden = true; }
+            catch (error) { accountMenuMessage.textContent = "Unable to sign out. Please try again."; }
+            return;
+        }
+        if (!user) {
+            accountMenuMessage.textContent = "Log in first to manage account settings.";
+            authMode = "login"; updateAuthMode(); showAuthScreen(); return;
+        }
+        if (action === "settings") {
+            accountMenuMessage.textContent = `Signed in as ${user.email || "your account"}. User ID: ${user.uid}.`;
+            return;
+        }
+        if (action === "privacy") {
+            accountMenuMessage.textContent = "Use a unique password, keep your email secure, and never share verification codes. Deletion requests are reviewed before any account/data removal.";
+            return;
+        }
+        if (action === "recovery") {
+            if (!user.email) { accountMenuMessage.textContent = "This account has no email address for password recovery. Sign in again using your original provider."; return; }
+            try {
+                await sendPasswordResetEmail(auth, user.email);
+                accountMenuMessage.textContent = `Password reset email sent to ${user.email}. Your account is still active.`;
+            } catch (error) {
+                console.error("Password recovery email failed:", error);
+                accountMenuMessage.textContent = error.code === "auth/too-many-requests" ? "Too many attempts. Please wait and try again." : "Could not send a recovery email. Check Firebase Authentication email/password settings.";
+            }
+            return;
+        }
+        if (action === "delete") {
+            const confirmed = confirm("Request deletion of your EarnLoop account? This will NOT delete your account immediately. Open disputes may place the request on hold, and an authorized review is required. You will need to re-authenticate.");
+            if (!confirmed) return;
+            const passwordProvider = user.providerData.some(provider => provider.providerId === "password");
+            if (passwordProvider) {
+                const password = prompt("For security, enter your current password to re-authenticate. Your password is not saved.");
+                if (password === null) return;
+                try { await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password)); }
+                catch (error) { accountMenuMessage.textContent = error.code === "auth/invalid-credential" || error.code === "auth/wrong-password" ? "Password did not match. No deletion request was sent." : "Re-authentication failed. No deletion request was sent."; return; }
+            } else {
+                accountMenuMessage.textContent = "For accounts using Google or another provider, sign out and sign in again before requesting deletion. Then reopen this menu.";
+                return;
+            }
+            try {
+                const functions = getFunctions(auth.app);
+                const requestDeletion = httpsCallable(functions, "requestAccountDeletion");
+                accountMenuMessage.textContent = "Submitting your request securely...";
+                const result = await requestDeletion({});
+                const status = result.data?.status || "requested";
+                accountMenuMessage.textContent = status === "needs_review"
+                    ? "Request recorded and placed on hold because an open dispute needs review. Your account remains active."
+                    : "Deletion request recorded for authorized review. Your account remains active until review and processing are completed.";
+            } catch (error) {
+                console.error("Account deletion request failed:", error);
+                accountMenuMessage.textContent = error.code === "functions/not-found" || error.code === "functions/unavailable"
+                    ? "Deletion request service is not deployed/configured yet. No account data was deleted."
+                    : error.code === "functions/failed-precondition"
+                        ? "Please sign in again, then retry the request. No account data was deleted."
+                        : "Could not submit the request. No account data was deleted. Check Cloud Functions deployment and logs.";
+            }
+        }
+    });
 });
 
 authForm.addEventListener("submit", async event => {
@@ -1729,7 +1807,7 @@ onAuthStateChanged(auth, async user => {
     if (!user) {
         profileButton.textContent = "👤";
     } else {
-        profileButton.textContent = "↪";
+        profileButton.textContent = "☰";
     }
 
     if (!authInitialized) {
