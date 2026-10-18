@@ -3,6 +3,14 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const logger = require('firebase-functions/logger');
+const crypto = require('node:crypto');
+const { defineSecret } = require('firebase-functions/params');
+const { onRequest } = require('firebase-functions/v2/https');
+const Razorpay = require('razorpay');
+
+const RAZORPAY_KEY_ID = defineSecret('RAZORPAY_KEY_ID');
+const RAZORPAY_KEY_SECRET = defineSecret('RAZORPAY_KEY_SECRET');
+const RAZORPAY_WEBHOOK_SECRET = defineSecret('RAZORPAY_WEBHOOK_SECRET');
 
 initializeApp();
 const db = getFirestore();
@@ -294,5 +302,148 @@ exports.processAccountDeletion = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, ti
     await writeSecurityAudit('account_deletion_failed', request.auth.uid, uid, { errorCode: String(error.code || 'processing-error').slice(0, 80) }).catch(() => {});
     logger.error('account_deletion_processing_failed', { targetUid: uid, actorUid: request.auth.uid, errorCode: String(error.code || 'unknown').slice(0, 80) });
     throw new HttpsError('internal', 'Deletion processing failed. The request is marked failed for authorized retry.');
+  }
+});
+
+
+// PHASE 10 — secure customer task funding (Razorpay). The browser never receives
+// the key secret. A task becomes funded only after a verified provider webhook
+// reports payment.captured. Withdrawals/payouts remain disabled until a separate
+// recipient/KYC/settlement workflow is implemented and audited.
+function getRazorpay() {
+  return new Razorpay({ key_id: RAZORPAY_KEY_ID.value(), key_secret: RAZORPAY_KEY_SECRET.value() });
+}
+
+exports.createTaskFundingOrder = onCall({
+  enforceAppCheck: ENFORCE_APP_CHECK,
+  secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET],
+}, async (request) => {
+  requireSignedIn(request);
+  const uid = request.auth.uid;
+  await consumeRateLimit(uid, 'create-funding-order', 5, 3600);
+  const taskId = boundedString(request.data?.taskId, 1, 150, 'Task ID');
+  const taskRef = db.collection('tasks').doc(taskId);
+  const taskSnap = await taskRef.get();
+  if (!taskSnap.exists) throw new HttpsError('not-found', 'Task not found.');
+  const task = taskSnap.data();
+  if (task.ownerId !== uid) throw new HttpsError('permission-denied', 'Only the task owner can fund this task.');
+  if (task.status !== 'open') throw new HttpsError('failed-precondition', 'Only open tasks can be funded.');
+  if (task.funded === true) throw new HttpsError('already-exists', 'This task is already funded.');
+  const reward = Number(task.proposedReward);
+  if (!Number.isInteger(reward) || reward < 1 || reward > 10000) throw new HttpsError('failed-precondition', 'Task reward is invalid.');
+  const amount = reward * 100; // INR paise, derived only from the trusted task document.
+  const order = await getRazorpay().orders.create({
+    amount, currency: 'INR', receipt: `el_${taskId.slice(0, 20)}_${Date.now()}`,
+    notes: { taskId, ownerId: uid, purpose: 'earnloop_task_funding' }
+  });
+  await db.collection('fundingOrders').doc(order.id).create({
+    provider: 'razorpay', providerOrderId: order.id, taskId, ownerId: uid,
+    amountPaise: amount, currency: 'INR', status: 'created',
+    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+  });
+  await writeSecurityAudit('task_funding_order_created', uid, uid, { taskId, orderId: order.id, amountPaise: amount });
+  return { keyId: RAZORPAY_KEY_ID.value(), orderId: order.id, amount, currency: 'INR', taskId, taskTitle: task.title };
+});
+
+// Admin-only reconciliation for ambiguous/missed webhook deliveries.
+// This never trusts client-supplied payment status; it queries Razorpay directly.
+exports.reconcileFundingOrder = onCall({
+  enforceAppCheck: ENFORCE_APP_CHECK,
+  secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET],
+}, async (request) => {
+  requireAdmin(request);
+  await consumeRateLimit(request.auth.uid, 'reconcile-funding-order', 20, 3600);
+  const orderId = boundedString(request.data?.orderId, 5, 100, 'Razorpay order ID');
+  const orderRef = db.collection('fundingOrders').doc(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) throw new HttpsError('not-found', 'Funding order not found.');
+  const orderData = orderSnap.data();
+  if (orderData.provider !== 'razorpay') throw new HttpsError('failed-precondition', 'Unsupported payment provider.');
+  if (orderData.status === 'captured') return { status: 'captured', alreadyReconciled: true };
+
+  let providerOrder;
+  let payments;
+  try {
+    const razorpay = getRazorpay();
+    providerOrder = await razorpay.orders.fetch(orderId);
+    payments = await razorpay.orders.fetchPayments(orderId);
+  } catch (error) {
+    logger.error('funding_reconciliation_provider_error', { orderId, code: String(error.statusCode || error.code || 'provider-error').slice(0, 80) });
+    throw new HttpsError('unavailable', 'Could not verify the order with the payment provider. Retry later.');
+  }
+  if (String(providerOrder.id) !== orderId || Number(providerOrder.amount) !== Number(orderData.amountPaise) || providerOrder.currency !== orderData.currency) {
+    await writeSecurityAudit('funding_reconciliation_mismatch', request.auth.uid, orderData.ownerId, { orderId });
+    throw new HttpsError('failed-precondition', 'Provider order does not match the recorded funding order. Manual investigation is required.');
+  }
+  const captured = (payments.items || []).find(p => p.status === 'captured'
+    && Number(p.amount) === Number(orderData.amountPaise)
+    && p.currency === orderData.currency
+    && p.order_id === orderId);
+  if (!captured) {
+    const providerStatus = String(providerOrder.status || 'unknown');
+    await orderRef.update({ lastReconciledAt: FieldValue.serverTimestamp(), providerOrderStatus: providerStatus, updatedAt: FieldValue.serverTimestamp() });
+    await writeSecurityAudit('funding_reconciliation_no_capture', request.auth.uid, orderData.ownerId, { orderId, providerStatus });
+    return { status: 'not_captured', providerStatus };
+  }
+
+  const taskRef = db.collection('tasks').doc(orderData.taskId);
+  await db.runTransaction(async (tx) => {
+    const [freshOrder, taskSnap] = await Promise.all([tx.get(orderRef), tx.get(taskRef)]);
+    if (!freshOrder.exists || !taskSnap.exists) throw new HttpsError('failed-precondition', 'Order or task record is missing.');
+    const fresh = freshOrder.data();
+    const task = taskSnap.data();
+    if (fresh.status === 'captured') return;
+    if (fresh.status !== 'created' || task.ownerId !== fresh.ownerId || Number(task.proposedReward) * 100 !== Number(fresh.amountPaise)) {
+      throw new HttpsError('failed-precondition', 'Task and order no longer match. Manual investigation is required.');
+    }
+    tx.update(orderRef, { status: 'captured', providerPaymentId: String(captured.id), capturedAt: FieldValue.serverTimestamp(), reconciledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    tx.update(taskRef, { funded: true, fundingProvider: 'razorpay', fundingOrderId: orderId, fundedAt: FieldValue.serverTimestamp() });
+  });
+  await writeSecurityAudit('task_funding_reconciled_captured', request.auth.uid, orderData.ownerId, { orderId, paymentId: String(captured.id), amountPaise: Number(orderData.amountPaise) });
+  logger.info('task_funding_reconciled_captured', { orderId, paymentId: String(captured.id), actorUid: request.auth.uid });
+  return { status: 'captured', paymentId: String(captured.id) };
+});
+
+exports.razorpayWebhook = onRequest({
+  region: 'us-central1',
+  secrets: [RAZORPAY_WEBHOOK_SECRET],
+  cors: false,
+}, async (req, res) => {
+  if (req.method !== 'POST') return res.status(405).send('Method not allowed');
+  const signature = req.get('x-razorpay-signature');
+  if (!signature || !req.rawBody) return res.status(400).send('Missing signature or body');
+  const expected = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET.value()).update(req.rawBody).digest();
+  let supplied;
+  try { supplied = Buffer.from(signature, 'hex'); } catch { return res.status(400).send('Invalid signature'); }
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    logger.warn('razorpay_webhook_invalid_signature');
+    return res.status(400).send('Invalid signature');
+  }
+  const event = req.body;
+  if (event?.event !== 'payment.captured') return res.status(200).send('Event ignored');
+  const payment = event?.payload?.payment?.entity;
+  const orderId = payment?.order_id;
+  if (!payment || !orderId || payment.status !== 'captured') return res.status(400).send('Invalid captured payment event');
+  const orderRef = db.collection('fundingOrders').doc(orderId);
+  try {
+    await db.runTransaction(async (tx) => {
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) throw new Error('unknown-order');
+      const orderData = orderSnap.data();
+      if (orderData.status === 'captured') return; // idempotent webhook retry
+      if (orderData.status !== 'created' || Number(payment.amount) !== Number(orderData.amountPaise) || payment.currency !== orderData.currency) throw new Error('payment-mismatch');
+      const taskRef = db.collection('tasks').doc(orderData.taskId);
+      const taskSnap = await tx.get(taskRef);
+      if (!taskSnap.exists) throw new Error('task-missing');
+      const task = taskSnap.data();
+      if (task.ownerId !== orderData.ownerId || Number(task.proposedReward) * 100 !== Number(orderData.amountPaise)) throw new Error('task-mismatch');
+      tx.update(orderRef, { status: 'captured', providerPaymentId: String(payment.id), capturedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      tx.update(taskRef, { funded: true, fundingProvider: 'razorpay', fundingOrderId: orderId, fundedAt: FieldValue.serverTimestamp() });
+    });
+    logger.info('task_funding_payment_captured', { orderId, paymentId: payment.id });
+    return res.status(200).send('OK');
+  } catch (error) {
+    logger.error('razorpay_webhook_processing_failed', { orderId, code: String(error.message || 'unknown').slice(0, 80) });
+    return res.status(500).send('Webhook processing failed; provider will retry');
   }
 });
