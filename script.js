@@ -654,29 +654,106 @@ function startApplicationsListener(user) {
 
             applications.forEach(application => {
                 const card = document.createElement("article");
-                card.className = "application-card";
+                card.className = "application-card application-card-enhanced";
 
+                const header = document.createElement("div");
+                header.className = "application-card-header";
+                const titleWrap = document.createElement("div");
+                titleWrap.className = "application-title-wrap";
+                const eyebrow = document.createElement("span");
+                eyebrow.className = "application-eyebrow";
+                eyebrow.textContent = "TASK APPLICATION";
                 const title = document.createElement("h3");
-                title.textContent = application.taskTitle;
-
-                const applicant = document.createElement("p");
-                applicant.textContent =
-                    "Applicant: " + application.applicantEmail;
-
-                const message = document.createElement("p");
-                message.textContent =
-                    "Message: " + application.message;
+                title.className = "application-task-title";
+                title.textContent = application.taskTitle || "Untitled task";
+                titleWrap.append(eyebrow, title);
 
                 const status = document.createElement("span");
-                status.className = "application-status";
-                status.textContent =
-                    "Status: " + application.status;
+                status.className = "application-status status-" + String(application.status || "pending").toLowerCase();
+                status.textContent = String(application.status || "pending").replace(/^./, ch => ch.toUpperCase());
+                header.append(titleWrap, status);
+
+                const taskPanel = document.createElement("section");
+                taskPanel.className = "application-task-details";
+                const taskPanelHeading = document.createElement("h4");
+                taskPanelHeading.textContent = "Task details";
+                const description = document.createElement("p");
+                description.className = "application-task-description";
+                description.textContent = "Loading task description…";
+                const metaGrid = document.createElement("div");
+                metaGrid.className = "application-meta-grid";
+
+                function addMeta(labelText, valueText, extraClass = "") {
+                    const item = document.createElement("div");
+                    item.className = "application-meta-item" + (extraClass ? " " + extraClass : "");
+                    const label = document.createElement("span");
+                    label.className = "application-meta-label";
+                    label.textContent = labelText;
+                    const value = document.createElement("span");
+                    value.className = "application-meta-value";
+                    value.textContent = valueText;
+                    item.append(label, value);
+                    metaGrid.appendChild(item);
+                }
+
+                addMeta("Customer ID", application.ownerId || "Unavailable", "application-customer-id");
+                addMeta("Task ID", application.taskId || "Unavailable");
+                addMeta("Task created", "Loading…");
+                addMeta("Task status", "Loading…", "application-task-status-meta");
+                taskPanel.append(taskPanelHeading, description, metaGrid);
+
+                // Application documents intentionally store a task snapshot, but not the
+                // full description or task creation timestamp. Fetch the authoritative task.
+                getDoc(doc(db, "tasks", application.taskId)).then(taskSnapshot => {
+                    const metaItems = metaGrid.querySelectorAll(".application-meta-item");
+                    if (!taskSnapshot.exists()) {
+                        description.textContent = "The original task record is no longer available.";
+                        if (metaItems[2]) metaItems[2].querySelector(".application-meta-value").textContent = "Unavailable";
+                        if (metaItems[3]) metaItems[3].querySelector(".application-meta-value").textContent = "Unknown";
+                        return;
+                    }
+                    const task = taskSnapshot.data();
+                    description.textContent = task.description || "No description was provided for this task.";
+                    if (metaItems[2]) metaItems[2].querySelector(".application-meta-value").textContent = formatAuditTime(task.createdAt);
+                    if (metaItems[3]) {
+                        const taskStatusValue = metaItems[3].querySelector(".application-meta-value");
+                        taskStatusValue.textContent = String(task.status || "unknown").replace(/^./, ch => ch.toUpperCase());
+                        taskStatusValue.dataset.status = task.status || "unknown";
+                    }
+                }).catch(error => {
+                    console.error("Unable to load task details for application:", error);
+                    description.textContent = "Task description could not be loaded. Please refresh and try again.";
+                    const metaItems = metaGrid.querySelectorAll(".application-meta-item");
+                    if (metaItems[2]) metaItems[2].querySelector(".application-meta-value").textContent = "Unavailable";
+                    if (metaItems[3]) metaItems[3].querySelector(".application-meta-value").textContent = "Unavailable";
+                });
+
+                const applicantPanel = document.createElement("div");
+                applicantPanel.className = "application-applicant-panel";
+                const applicantHeading = document.createElement("h4");
+                applicantHeading.textContent = "Applicant";
+                const applicant = document.createElement("p");
+                applicant.className = "application-applicant-email";
+                applicant.textContent = application.applicantEmail || application.applicantId || "Unknown applicant";
+                const applicantId = document.createElement("p");
+                applicantId.className = "application-applicant-id";
+                applicantId.textContent = "Applicant ID: " + (application.applicantId || "Unavailable");
+                applicantPanel.append(applicantHeading, applicant, applicantId);
+
+                const messagePanel = document.createElement("div");
+                messagePanel.className = "application-message-panel";
+                const messageHeading = document.createElement("h4");
+                messageHeading.textContent = "Applicant message";
+                const message = document.createElement("p");
+                message.textContent = application.message || "No message supplied.";
+                messagePanel.append(messageHeading, message);
+
                 const timeline = document.createElement("p");
-                timeline.className = "audit-timestamp";
+                timeline.className = "audit-timestamp application-timeline";
                 timeline.textContent = "Applied: " + formatAuditTime(application.createdAt) +
                     (application.reviewedAt ? " · Reviewed: " + formatAuditTime(application.reviewedAt) : " · Awaiting decision");
 
-                card.append(title, applicant, message, status, timeline);
+                card.append(header, taskPanel, applicantPanel, messagePanel, timeline);
 
                 if (application.status === "pending") {
                     const actions = document.createElement("div");

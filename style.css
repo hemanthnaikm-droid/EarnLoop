@@ -867,3 +867,42 @@ h1 {
 .danger-button { background: #532a32; border-color: #7e3b48; color: #fff; }
 .admin-nav-item[hidden] { display: none !important; }
 @media (min-width: 700px) { .admin-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+
+/* Enhanced Task Applications cards */
+.application-card-enhanced {
+  display: grid;
+  gap: 16px;
+  padding: clamp(16px, 2.5vw, 24px);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.96));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  min-width: 0;
+}
+.application-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.application-title-wrap { min-width: 0; }
+.application-eyebrow { display: inline-block; margin-bottom: 7px; color: #94a3b8; font-size: .7rem; font-weight: 800; letter-spacing: .13em; }
+.application-task-title { margin: 0; color: #f8fafc; line-height: 1.3; overflow-wrap: anywhere; }
+.application-status { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 7px 11px; border-radius: 999px; background: rgba(148, 163, 184, .16); color: #e2e8f0; font-size: .78rem; font-weight: 750; text-transform: capitalize; }
+.application-status.status-pending { background: rgba(245, 158, 11, .15); color: #fbbf24; }
+.application-status.status-accepted { background: rgba(34, 197, 94, .15); color: #86efac; }
+.application-status.status-rejected { background: rgba(239, 68, 68, .15); color: #fca5a5; }
+.application-status.status-approved { background: rgba(34, 197, 94, .15); color: #86efac; }
+.application-task-details, .application-applicant-panel, .application-message-panel { padding: 15px; border: 1px solid rgba(148, 163, 184, .15); border-radius: 14px; background: rgba(2, 6, 23, .25); min-width: 0; }
+.application-task-details h4, .application-applicant-panel h4, .application-message-panel h4 { margin: 0 0 10px; color: #cbd5e1; font-size: .88rem; }
+.application-task-description { margin: 0 0 15px; color: #e2e8f0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.application-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.application-meta-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 10px 11px; border-radius: 10px; background: rgba(148, 163, 184, .07); }
+.application-meta-label { color: #94a3b8; font-size: .72rem; font-weight: 650; }
+.application-meta-value { color: #f1f5f9; font-size: .83rem; overflow-wrap: anywhere; }
+.application-customer-id .application-meta-value, .application-applicant-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; overflow-wrap: anywhere; }
+.application-applicant-panel p, .application-message-panel p { margin: 0; color: #e2e8f0; line-height: 1.55; overflow-wrap: anywhere; }
+.application-applicant-panel .application-applicant-id { margin-top: 6px; color: #94a3b8; font-size: .74rem; }
+.application-timeline { margin: 0; color: #94a3b8; font-size: .78rem; line-height: 1.5; }
+.application-review-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 2px; }
+@media (max-width: 520px) {
+  .application-card-header { flex-direction: column; }
+  .application-meta-grid { grid-template-columns: minmax(0, 1fr); }
+  .application-card-enhanced { border-radius: 15px; }
+}
