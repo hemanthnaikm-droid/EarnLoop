@@ -20,6 +20,18 @@
             <span class="brand-icon">E</span>
             <span>Earn<span class="accent">Loop</span></span>
         </a>
+   
+
+        <button
+    id="notificationButton"
+    class="notification-button"
+    type="button"
+    aria-label="Open notifications"
+    aria-expanded="false"
+>
+    🔔
+    <span id="notificationBadge" hidden>0</span>
+        </button>
 
         <button
     id="profileButton"
@@ -40,6 +52,40 @@
             <p id="accountMenuMessage" class="account-menu-message" aria-live="polite"></p>
         </div>
     </header>
+
+
+    <section
+    id="notificationPanel"
+    class="notification-panel"
+    aria-labelledby="notificationHeading"
+    hidden
+>
+    <div class="notification-panel-header">
+        <div>
+            <p class="eyebrow">EARNLOOP UPDATES</p>
+            <h2 id="notificationHeading">Notifications</h2>
+        </div>
+
+        <button
+            id="closeNotifications"
+            type="button"
+            aria-label="Close notifications"
+        >
+            ✕
+        </button>
+    </div>
+
+    <p
+        id="notificationMessage"
+        role="status"
+        aria-live="polite"
+    >
+        Sign in to view your notifications.
+    </p>
+
+    <div id="notificationList"></div>
+</section>
+
 
     <main>
 
@@ -562,6 +608,7 @@
     </div>
 
     <script type="module" src="script.js"></script>
+    <script type="module" src="notifications.js"></script>
 
 </body>
   </html>

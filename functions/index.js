@@ -540,10 +540,7 @@ exports.markNotificationRead = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
   return { ok: true };
 });
 
-const { onDocumentCreated, onDocumentUpdated } =
-  require("firebase-functions/v2/firestore");
-const { getFirestore, FieldValue } =
-  require("firebase-admin/firestore");
+
 
 const notificationDb = getFirestore();
 
