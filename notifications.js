@@ -3,10 +3,11 @@ import { auth, db, authReady } from "./firebase.js";
 import {
     collection,
     query,
-    where,
     orderBy,
     limit,
-    onSnapshot
+    onSnapshot,
+    doc,
+    updateDoc
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 import {
@@ -80,7 +81,7 @@ function renderNotifications() {
         heading.textContent = item.title || "EarnLoop update";
 
         const body = document.createElement("p");
-        body.textContent = item.body || "You have a new update.";
+        body.textContent = item.message || item.body || "You have a new update.";
 
         const date = document.createElement("small");
         date.textContent = formatDate(item.createdAt);
@@ -94,25 +95,21 @@ function renderNotifications() {
             readButton.textContent = "Mark as read";
 
             readButton.addEventListener("click", async () => {
-                readButton.disabled = true;
+    readButton.disabled = true;
 
-                try {
-                    await markNotificationRead({
-                        notificationId: item.id
-                    });
-                } catch (error) {
-                    console.error(
-                        "Could not mark notification as read:",
-                        error
-                    );
-
-                    setMessage(
-                        error.message || "Unable to update notification."
-                    );
-
-                    readButton.disabled = false;
-                }
-            });
+    try {
+        await updateDoc(
+            doc(db, "users", currentUser.uid, "notifications", item.id),
+            { read: true }
+        );
+    } catch (error) {
+        console.error("Mark notification read failed:", error);
+        setMessage(
+            `Could not mark as read: ${error.code || error.message}`
+        );
+        readButton.disabled = false;
+    }
+});
 
             card.appendChild(readButton);
         }
@@ -143,11 +140,10 @@ function startListening(user) {
     setMessage("Loading notifications...");
 
     const notificationsQuery = query(
-        collection(db, "notifications"),
-        where("uid", "==", user.uid),
-        orderBy("createdAt", "desc"),
-        limit(50)
-    );
+    collection(db, "users", user.uid, "notifications"),
+    orderBy("createdAt", "desc"),
+    limit(50)
+);
 
     stopNotifications = onSnapshot(
         notificationsQuery,
