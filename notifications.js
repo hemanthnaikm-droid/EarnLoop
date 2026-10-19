@@ -197,6 +197,47 @@ document.addEventListener("keydown", (event) => {
 
 await authReady;
 
+$("markAllNotificationsRead").addEventListener(
+    "click",
+    async () => {
+        if (!currentUser) return;
+
+        const unread = notifications.filter(item => !item.read);
+
+        if (!unread.length) {
+            setMessage("All notifications are already read.");
+            return;
+        }
+
+        const button = $("markAllNotificationsRead");
+        button.disabled = true;
+
+        try {
+            for (const item of unread) {
+                await updateDoc(
+                    doc(
+                        db,
+                        "users",
+                        currentUser.uid,
+                        "notifications",
+                        item.id
+                    ),
+                    { read: true }
+                );
+            }
+
+            setMessage("All notifications marked as read.");
+        } catch (error) {
+            console.error("Mark all as read failed:", error);
+            setMessage(
+                `Update failed: ${error.code || error.message}`
+            );
+        } finally {
+            button.disabled = false;
+        }
+    }
+);
+
 onAuthStateChanged(auth, (user) => {
     currentUser = user;
 
