@@ -1,0 +1,289 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'email', 'createdAt', 'role'
+        ])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == 'user'
+        && request.resource.data.createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /tasks/{taskId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'title', 'description', 'category',
+          'proposedReward', 'ownerId', 'ownerEmail',
+          'createdAt', 'status', 'funded'
+        ])
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerEmail == request.auth.token.email
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 3
+        && request.resource.data.title.size() <= 70
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 10
+        && request.resource.data.description.size() <= 1000
+        && request.resource.data.category in [
+          'digital', 'skills', 'local'
+        ]
+        && request.resource.data.proposedReward is int
+        && request.resource.data.proposedReward >= 1
+        && request.resource.data.proposedReward <= 10000
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.status == 'open'
+        && request.resource.data.funded == false;
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'status', 'moderatedAt', 'moderatedBy'
+          ])
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasAll([
+            'status', 'moderatedAt', 'moderatedBy'
+          ])
+        && request.resource.data.status in ['open', 'hidden']
+        && request.resource.data.moderatedAt == request.time
+        && request.resource.data.moderatedBy == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    match /applications/{applicationId} {
+      function taskExists(taskId) {
+        return exists(
+          /databases/$(database)/documents/tasks/$(taskId)
+        );
+      }
+
+      function taskData(taskId) {
+        return get(
+          /databases/$(database)/documents/tasks/$(taskId)
+        ).data;
+      }
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'taskId', 'taskTitle', 'ownerId', 'applicantId',
+          'applicantEmail', 'message', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'taskId', 'taskTitle', 'ownerId', 'applicantId',
+          'applicantEmail', 'message', 'status', 'createdAt'
+        ])
+        && request.resource.data.applicantId == request.auth.uid
+        && request.resource.data.applicantEmail == request.auth.token.email
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 500
+        && request.resource.data.taskId is string
+        && applicationId ==
+          request.resource.data.taskId + '_' + request.auth.uid
+        && taskExists(request.resource.data.taskId)
+        && taskData(request.resource.data.taskId).status == 'open'
+        && taskData(request.resource.data.taskId).ownerId ==
+          request.resource.data.ownerId
+        && taskData(request.resource.data.taskId).title ==
+          request.resource.data.taskTitle
+        && taskData(request.resource.data.taskId).ownerId !=
+          request.auth.uid;
+
+      allow get: if signedIn()
+        && (
+          applicationId.matches('.*_' + request.auth.uid)
+          || resource.data.ownerId == request.auth.uid
+          || resource.data.applicantId == request.auth.uid
+        );
+
+      allow list: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.ownerId == request.auth.uid
+            || resource.data.applicantId == request.auth.uid
+          )
+        );
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'rejected']
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasAll(['status', 'reviewedAt'])
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['status', 'reviewedAt'])
+        && request.resource.data.reviewedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /submissions/{submissionId} {
+      function applicationExists() {
+        return exists(
+          /databases/$(database)/documents/applications/$(submissionId)
+        );
+      }
+
+      function applicationData() {
+        return get(
+          /databases/$(database)/documents/applications/$(submissionId)
+        ).data;
+      }
+
+      allow create: if signedIn()
+        && applicationExists()
+        && applicationData().status == 'accepted'
+        && applicationData().applicantId == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          'taskId', 'applicationId', 'taskTitle', 'ownerId',
+          'applicantId', 'applicantEmail', 'evidence',
+          'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'taskId', 'applicationId', 'taskTitle', 'ownerId',
+          'applicantId', 'applicantEmail', 'evidence',
+          'status', 'createdAt'
+        ])
+        && request.resource.data.applicationId == submissionId
+        && request.resource.data.taskId == applicationData().taskId
+        && request.resource.data.taskTitle == applicationData().taskTitle
+        && request.resource.data.ownerId == applicationData().ownerId
+        && request.resource.data.applicantId == request.auth.uid
+        && request.resource.data.applicantEmail == request.auth.token.email
+        && request.resource.data.evidence is string
+        && request.resource.data.evidence.size() >= 10
+        && request.resource.data.evidence.size() <= 3000
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.createdAt == request.time;
+
+      allow get: if signedIn()
+        && (
+          (
+            applicationExists()
+            && applicationData().applicantId == request.auth.uid
+            && applicationData().status == 'accepted'
+          )
+          || resource.data.ownerId == request.auth.uid
+          || resource.data.applicantId == request.auth.uid
+        );
+
+      allow list: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.ownerId == request.auth.uid
+            || resource.data.applicantId == request.auth.uid
+          )
+        );
+
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasAll(['status', 'reviewedAt'])
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['status', 'reviewedAt'])
+        && request.resource.data.status != resource.data.status
+        && request.resource.data.reviewedAt == request.time
+        && (
+          (
+            resource.data.ownerId == request.auth.uid
+            && resource.data.status == 'submitted'
+            && request.resource.data.status in ['approved', 'disputed']
+          )
+          || (
+            resource.data.ownerId == request.auth.uid
+            && resource.data.status == 'disputed'
+            && request.resource.data.status == 'resolved'
+          )
+          || (
+            resource.data.applicantId == request.auth.uid
+            && resource.data.status in ['submitted', 'approved']
+            && request.resource.data.status == 'disputed'
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'taskId', 'taskTitle', 'reporterId',
+          'reporterEmail', 'reason', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'taskId', 'taskTitle', 'reporterId',
+          'reporterEmail', 'reason', 'status', 'createdAt'
+        ])
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.reporterEmail == request.auth.token.email
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() >= 10
+        && request.resource.data.reason.size() <= 500
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && exists(
+          /databases/$(database)/documents/tasks/$(request.resource.data.taskId)
+        );
+
+      allow get, list: if isAdmin();
+
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasAll([
+            'status', 'reviewedAt', 'reviewedBy'
+          ])
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'status', 'reviewedAt', 'reviewedBy'
+          ])
+        && request.resource.data.status == 'reviewed'
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.reviewedBy == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    match /accountDeletionRequests/{requestId} {
+      allow get: if signedIn()
+        && (request.auth.uid == requestId || isAdmin());
+
+      allow list: if isAdmin();
+
+      // Trusted Cloud Functions only.
+      allow create, update, delete: if false;
+    }
+
+    match /securityAuditLogs/{logId} {
+      allow get, list: if isAdmin();
+
+      // Trusted Cloud Functions only.
+      allow create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

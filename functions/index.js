@@ -6,6 +6,7 @@ const logger = require('firebase-functions/logger');
 const crypto = require('node:crypto');
 const { defineSecret } = require('firebase-functions/params');
 const { onRequest } = require('firebase-functions/v2/https');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const Razorpay = require('razorpay');
 
 const RAZORPAY_KEY_ID = defineSecret('RAZORPAY_KEY_ID');
@@ -345,65 +346,6 @@ exports.createTaskFundingOrder = onCall({
   return { keyId: RAZORPAY_KEY_ID.value(), orderId: order.id, amount, currency: 'INR', taskId, taskTitle: task.title };
 });
 
-// Admin-only reconciliation for ambiguous/missed webhook deliveries.
-// This never trusts client-supplied payment status; it queries Razorpay directly.
-exports.reconcileFundingOrder = onCall({
-  enforceAppCheck: ENFORCE_APP_CHECK,
-  secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET],
-}, async (request) => {
-  requireAdmin(request);
-  await consumeRateLimit(request.auth.uid, 'reconcile-funding-order', 20, 3600);
-  const orderId = boundedString(request.data?.orderId, 5, 100, 'Razorpay order ID');
-  const orderRef = db.collection('fundingOrders').doc(orderId);
-  const orderSnap = await orderRef.get();
-  if (!orderSnap.exists) throw new HttpsError('not-found', 'Funding order not found.');
-  const orderData = orderSnap.data();
-  if (orderData.provider !== 'razorpay') throw new HttpsError('failed-precondition', 'Unsupported payment provider.');
-  if (orderData.status === 'captured') return { status: 'captured', alreadyReconciled: true };
-
-  let providerOrder;
-  let payments;
-  try {
-    const razorpay = getRazorpay();
-    providerOrder = await razorpay.orders.fetch(orderId);
-    payments = await razorpay.orders.fetchPayments(orderId);
-  } catch (error) {
-    logger.error('funding_reconciliation_provider_error', { orderId, code: String(error.statusCode || error.code || 'provider-error').slice(0, 80) });
-    throw new HttpsError('unavailable', 'Could not verify the order with the payment provider. Retry later.');
-  }
-  if (String(providerOrder.id) !== orderId || Number(providerOrder.amount) !== Number(orderData.amountPaise) || providerOrder.currency !== orderData.currency) {
-    await writeSecurityAudit('funding_reconciliation_mismatch', request.auth.uid, orderData.ownerId, { orderId });
-    throw new HttpsError('failed-precondition', 'Provider order does not match the recorded funding order. Manual investigation is required.');
-  }
-  const captured = (payments.items || []).find(p => p.status === 'captured'
-    && Number(p.amount) === Number(orderData.amountPaise)
-    && p.currency === orderData.currency
-    && p.order_id === orderId);
-  if (!captured) {
-    const providerStatus = String(providerOrder.status || 'unknown');
-    await orderRef.update({ lastReconciledAt: FieldValue.serverTimestamp(), providerOrderStatus: providerStatus, updatedAt: FieldValue.serverTimestamp() });
-    await writeSecurityAudit('funding_reconciliation_no_capture', request.auth.uid, orderData.ownerId, { orderId, providerStatus });
-    return { status: 'not_captured', providerStatus };
-  }
-
-  const taskRef = db.collection('tasks').doc(orderData.taskId);
-  await db.runTransaction(async (tx) => {
-    const [freshOrder, taskSnap] = await Promise.all([tx.get(orderRef), tx.get(taskRef)]);
-    if (!freshOrder.exists || !taskSnap.exists) throw new HttpsError('failed-precondition', 'Order or task record is missing.');
-    const fresh = freshOrder.data();
-    const task = taskSnap.data();
-    if (fresh.status === 'captured') return;
-    if (fresh.status !== 'created' || task.ownerId !== fresh.ownerId || Number(task.proposedReward) * 100 !== Number(fresh.amountPaise)) {
-      throw new HttpsError('failed-precondition', 'Task and order no longer match. Manual investigation is required.');
-    }
-    tx.update(orderRef, { status: 'captured', providerPaymentId: String(captured.id), capturedAt: FieldValue.serverTimestamp(), reconciledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    tx.update(taskRef, { funded: true, fundingProvider: 'razorpay', fundingOrderId: orderId, fundedAt: FieldValue.serverTimestamp() });
-  });
-  await writeSecurityAudit('task_funding_reconciled_captured', request.auth.uid, orderData.ownerId, { orderId, paymentId: String(captured.id), amountPaise: Number(orderData.amountPaise) });
-  logger.info('task_funding_reconciled_captured', { orderId, paymentId: String(captured.id), actorUid: request.auth.uid });
-  return { status: 'captured', paymentId: String(captured.id) };
-});
-
 exports.razorpayWebhook = onRequest({
   region: 'us-central1',
   secrets: [RAZORPAY_WEBHOOK_SECRET],
@@ -447,3 +389,257 @@ exports.razorpayWebhook = onRequest({
     return res.status(500).send('Webhook processing failed; provider will retry');
   }
 });
+
+
+// PHASE 11 — participant-only chat and post-approval worker feedback.
+exports.sendTaskChatMessage = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  requireSignedIn(request);
+  const uid = request.auth.uid;
+  await consumeRateLimit(uid, 'send-chat-message', 60, 3600);
+  const applicationId = boundedString(request.data?.applicationId, 1, 300, 'Application ID');
+  const message = boundedString(request.data?.message, 1, 2000, 'Message');
+  const appSnap = await db.collection('applications').doc(applicationId).get();
+  if (!appSnap.exists) throw new HttpsError('not-found', 'Application not found.');
+  const app = appSnap.data();
+  if (![app.ownerId, app.applicantId].includes(uid)) throw new HttpsError('permission-denied', 'Only the task customer and applicant can use this chat.');
+  if (!['accepted'].includes(app.status)) throw new HttpsError('failed-precondition', 'Chat is available after the customer accepts the application.');
+  const messageRef = db.collection('taskChats').doc(applicationId).collection('messages').doc();
+  await messageRef.create({ applicationId, taskId: app.taskId, ownerId: app.ownerId, applicantId: app.applicantId, senderId: uid, senderEmail: request.auth.token.email || '', message, createdAt: FieldValue.serverTimestamp() });
+  return { messageId: messageRef.id };
+});
+
+exports.submitWorkerFeedback = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  requireSignedIn(request);
+  const uid = request.auth.uid;
+  await consumeRateLimit(uid, 'submit-worker-feedback', 10, 3600);
+  const applicationId = boundedString(request.data?.applicationId, 1, 300, 'Application ID');
+  const rating = Number(request.data?.rating);
+  const comment = boundedString(request.data?.comment || 'No written comment.', 3, 1000, 'Feedback');
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new HttpsError('invalid-argument', 'Rating must be an integer from 1 to 5.');
+  const [appSnap, submissionSnap] = await Promise.all([
+    db.collection('applications').doc(applicationId).get(),
+    db.collection('submissions').doc(applicationId).get()
+  ]);
+  if (!appSnap.exists || !submissionSnap.exists) throw new HttpsError('not-found', 'Application or submission not found.');
+  const app = appSnap.data();
+  const submission = submissionSnap.data();
+  if (app.ownerId !== uid) throw new HttpsError('permission-denied', 'Only the customer who posted the task can rate the worker.');
+  if (submission.ownerId !== uid || submission.status !== 'approved') throw new HttpsError('failed-precondition', 'Feedback is available only after work is approved.');
+  const ref = db.collection('workerFeedback').doc(applicationId);
+  const existing = await ref.get();
+  if (existing.exists) throw new HttpsError('already-exists', 'Feedback has already been submitted for this task.');
+  await ref.create({ applicationId, taskId: app.taskId, taskTitle: app.taskTitle, ownerId: uid, workerId: app.applicantId, rating, comment, createdAt: FieldValue.serverTimestamp() });
+  await writeSecurityAudit('worker_feedback_submitted', uid, app.applicantId, { applicationId, taskId: app.taskId, rating });
+  return { feedbackId: applicationId, rating };
+});
+
+
+// In-app notification helpers. Notifications contain minimal metadata only;
+// never copy task descriptions, chat message bodies, or sensitive content here.
+async function createUserNotification(uid, type, title, body, related = {}) {
+  if (!uid || typeof uid !== 'string') return;
+  await db.collection('notifications').add({
+    uid,
+    type,
+    title,
+    body,
+    related,
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+}
+
+// Notify a task owner when a worker applies.
+exports.notifyNewApplication = onDocumentCreated('applications/{applicationId}', async (event) => {
+  const app = event.data?.data();
+  if (!app || !app.ownerId || !app.applicantId) return;
+  await createUserNotification(
+    app.ownerId,
+    'application_received',
+    'New task application',
+    'Someone applied to your task.',
+    { applicationId: event.params.applicationId, taskId: app.taskId || null }
+  );
+});
+
+// Notify the worker when the customer accepts or rejects an application.
+exports.notifyApplicationDecision = onDocumentUpdated('applications/{applicationId}', async (event) => {
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
+  if (!before || !after || before.status === after.status) return;
+  if (!['accepted', 'rejected'].includes(after.status) || !after.applicantId) return;
+  await createUserNotification(
+    after.applicantId,
+    'application_' + after.status,
+    after.status === 'accepted' ? 'Application accepted' : 'Application not accepted',
+    after.status === 'accepted' ? 'Your task application was accepted.' : 'Your task application was rejected.',
+    { applicationId: event.params.applicationId, taskId: after.taskId || null }
+  );
+});
+
+// Notify the task owner when a worker submits work.
+exports.notifyWorkSubmission = onDocumentCreated('submissions/{submissionId}', async (event) => {
+  const submission = event.data?.data();
+  if (!submission || !submission.ownerId || !submission.applicantId) return;
+  await createUserNotification(
+    submission.ownerId,
+    'work_submitted',
+    'Work submitted',
+    'A worker submitted work for your task.',
+    { submissionId: event.params.submissionId, taskId: submission.taskId || null }
+  );
+});
+
+// Notify the worker about a review decision on their submitted work.
+exports.notifySubmissionDecision = onDocumentUpdated('submissions/{submissionId}', async (event) => {
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
+  if (!before || !after || before.status === after.status || !after.applicantId) return;
+  const allowed = ['approved', 'disputed', 'resolved'];
+  if (!allowed.includes(after.status)) return;
+  const messages = {
+    approved: ['Work approved', 'Your submitted work was approved.'],
+    disputed: ['Work disputed', 'A dispute was raised on a work submission.'],
+    resolved: ['Dispute resolved', 'The dispute on your submission was resolved.'],
+  };
+  const [title, body] = messages[after.status];
+  await createUserNotification(after.applicantId, 'submission_' + after.status, title, body, {
+    submissionId: event.params.submissionId,
+    taskId: after.taskId || null,
+  });
+});
+
+// Notify chat recipient when a message is created. Expected schema:
+// chats/{chatId}/messages/{messageId} with senderId and recipientId.
+// If your chat schema differs, adapt the path/field names before deploying.
+exports.notifyChatMessage = onDocumentCreated('chats/{chatId}/messages/{messageId}', async (event) => {
+  const message = event.data?.data();
+  if (!message || !message.recipientId || !message.senderId || message.senderId === message.recipientId) return;
+  await createUserNotification(
+    message.recipientId,
+    'chat_message',
+    'New message',
+    'You received a new message.',
+    { chatId: event.params.chatId, messageId: event.params.messageId }
+  );
+});
+
+// Authenticated users can mark only their own notification as read.
+exports.markNotificationRead = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  requireSignedIn(request);
+  const uid = request.auth.uid;
+  await consumeRateLimit(uid, 'mark-notification-read', 120, 3600);
+  const notificationId = boundedString(request.data?.notificationId, 1, 180, 'Notification ID');
+  const ref = db.collection('notifications').doc(notificationId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'Notification not found.');
+    if (snap.data().uid !== uid) throw new HttpsError('permission-denied', 'You cannot change this notification.');
+    tx.update(ref, { read: true, readAt: FieldValue.serverTimestamp() });
+  });
+  return { ok: true };
+});
+
+const { onDocumentCreated, onDocumentUpdated } =
+  require("firebase-functions/v2/firestore");
+const { getFirestore, FieldValue } =
+  require("firebase-admin/firestore");
+
+const notificationDb = getFirestore();
+
+async function createNotification({
+  recipientId,
+  type,
+  title,
+  message,
+  relatedId = null
+}) {
+  if (!recipientId || !type || !title || !message) return;
+
+  await notificationDb
+    .collection("users")
+    .doc(recipientId)
+    .collection("notifications")
+    .add({
+      type,
+      title,
+      message,
+      relatedId,
+      read: false,
+      createdAt: FieldValue.serverTimestamp()
+    });
+}
+
+// Notify task owner when a worker applies.
+exports.notifyNewApplication = onDocumentCreated(
+  "applications/{applicationId}",
+  async (event) => {
+    const application = event.data?.data();
+    if (!application) return;
+
+    await createNotification({
+      recipientId: application.ownerId,
+      type: "new_application",
+      title: "New task application",
+      message: `${application.applicantEmail || "A worker"} applied for ${application.taskTitle || "your task"}.`,
+      relatedId: event.params.applicationId
+    });
+  }
+);
+
+// Notify worker when application status changes.
+exports.notifyApplicationDecision = onDocumentUpdated(
+  "applications/{applicationId}",
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    if (!before || !after || before.status === after.status) return;
+
+    if (!["accepted", "rejected"].includes(after.status)) return;
+
+    await createNotification({
+      recipientId: after.applicantId,
+      type: "application_decision",
+      title: after.status === "accepted"
+        ? "Application accepted"
+        : "Application rejected",
+      message: `Your application for ${after.taskTitle || "a task"} was ${after.status}.`,
+      relatedId: event.params.applicationId
+    });
+  }
+);
+
+// Notify worker when submitted work is approved or disputed.
+exports.notifySubmissionUpdate = onDocumentUpdated(
+  "submissions/{submissionId}",
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    if (!before || !after || before.status === after.status) return;
+
+    const messages = {
+      approved: ["Work approved", "Your submitted work was approved."],
+      disputed: ["Work disputed", "A dispute was raised about submitted work."],
+      resolved: ["Dispute resolved", "The work dispute has been resolved."]
+    };
+
+    const notification = messages[after.status];
+    if (!notification) return;
+
+    const recipientId =
+      after.status === "disputed" &&
+      before.applicantId === after.applicantId
+        ? after.ownerId
+        : after.applicantId;
+
+    await createNotification({
+      recipientId,
+      type: "submission_update",
+      title: notification[0],
+      message: notification[1],
+      relatedId: event.params.submissionId
+    });
+  }
+);
