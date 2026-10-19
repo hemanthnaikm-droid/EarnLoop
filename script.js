@@ -1234,7 +1234,7 @@ function startTaskListener() {
 
             renderFirebaseTasks();
             // Re-render reward amounts if task data arrives after submissions.
-            renderRewardLedger(latestRewardSubmissionDocs);
+          //  renderRewardLedger(latestRewardSubmissionDocs);
         },
         error => {
             console.error("Task loading error:", error);

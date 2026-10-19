@@ -6,8 +6,7 @@ import {
     orderBy,
     limit,
     onSnapshot,
-    doc,
-    updateDoc
+    where
 } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 import {
@@ -94,22 +93,21 @@ function renderNotifications() {
             readButton.className = "task-button";
             readButton.textContent = "Mark as read";
 
-            readButton.addEventListener("click", async () => {
-    readButton.disabled = true;
+    readButton.addEventListener("click", async () => {
+        readButton.disabled = true;
 
-    try {
-        await updateDoc(
-            doc(db, "users", currentUser.uid, "notifications", item.id),
-            { read: true }
-        );
-    } catch (error) {
-        console.error("Mark notification read failed:", error);
-        setMessage(
+        try {
+             await markNotificationRead({
+                notificationId: item.id
+             });
+         } catch (error) {
+           console.error("Mark notification read failed:", error);
+           setMessage(
             `Could not mark as read: ${error.code || error.message}`
-        );
-        readButton.disabled = false;
-    }
-});
+          );
+          readButton.disabled = false;
+         }
+    });
 
             card.appendChild(readButton);
         }
@@ -140,35 +138,36 @@ function startListening(user) {
     setMessage("Loading notifications...");
 
     const notificationsQuery = query(
-    collection(db, "users", user.uid, "notifications"),
-    orderBy("createdAt", "desc"),
-    limit(50)
+  collection(db, "notifications"),
+  where("uid", "==", user.uid),
+  orderBy("createdAt", "desc"),
+  limit(50)
 );
 
-    stopNotifications = onSnapshot(
-        notificationsQuery,
-        (snapshot) => {
-            notifications = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+stopNotifications = onSnapshot(
+  notificationsQuery,
+  (snapshot) => {
+    notifications = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
 
-            updateBadge();
-            renderNotifications();
+    updateBadge();
+    renderNotifications();
 
-            setMessage(
-                notifications.length
-                    ? `${notifications.length} recent notification(s).`
-                    : "No notifications yet."
-            );
-        },
-        (error) => {
-            console.error("Notification listener failed:", error);
-            setMessage(
-                "Unable to load notifications. Check your connection and access."
-            );
-        }
+    setMessage(
+      notifications.length
+        ? `${notifications.length} recent notification(s).`
+        : "No notifications yet."
     );
+  },
+  (error) => {
+    console.error("Notification listener failed:", error);
+    setMessage(
+      "Unable to load notifications. Check your connection and access."
+    );
+  }
+);
 }
 
 button.addEventListener("click", () => {
@@ -214,16 +213,9 @@ $("markAllNotificationsRead").addEventListener(
 
         try {
             for (const item of unread) {
-                await updateDoc(
-                    doc(
-                        db,
-                        "users",
-                        currentUser.uid,
-                        "notifications",
-                        item.id
-                    ),
-                    { read: true }
-                );
+                await markNotificationRead({
+                   notificationId: item.id
+                });
             }
 
             setMessage("All notifications marked as read.");
